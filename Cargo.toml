@@ -1,0 +1,12 @@
+[package]
+name = "yumak"
+version = "0.1.0"
+authors = ["Şamil NART <samil.nart@gmail.com>", "Ozan KARAALİ <ozan.karaali@gmail.com>"]
+
+[dependencies.engine]
+path = "engine"
+
+[dependencies.common]
+path = "common"
+
+[dependencies]

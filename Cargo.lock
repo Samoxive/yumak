@@ -1,0 +1,19 @@
+[[package]]
+name = "common"
+version = "0.1.0"
+
+[[package]]
+name = "engine"
+version = "0.1.0"
+dependencies = [
+ "common 0.1.0",
+]
+
+[[package]]
+name = "yumak"
+version = "0.1.0"
+dependencies = [
+ "common 0.1.0",
+ "engine 0.1.0",
+]
+

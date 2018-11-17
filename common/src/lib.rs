@@ -1,12 +1,17 @@
 pub mod bytecode {
+    use std::sync::Arc;
+    #[derive(Clone)]
     pub enum Inst {
+        Alloc {
+            name: String,
+        },
         PushInt {
             name: String,
-            value: i32,
+            value: i64,
         },
         PushFloat {
             name: String,
-            value: f32,
+            value: f64,
         },
         PushBoolean {
             name: String,
@@ -14,7 +19,14 @@ pub mod bytecode {
         },
         PushFunction {
             name: String,
-            instructions: Vec<Inst>,
+            argument_names: Arc<Vec<String>>,
+            instructions: Arc<Vec<Inst>>,
+        },
+        PushList {
+            name: String,
+        },
+        PushObject {
+            name: String,
         },
         PopObjectValue {
             pop_to_name: String,
@@ -28,13 +40,10 @@ pub mod bytecode {
         },
         Call {
             name: String,
-            arguments: Vec<String>,
+            arguments: Arc<Vec<String>>,
             this: Option<String>,
         },
         PushCallResult {
-            name: String,
-        },
-        Pop {
             name: String,
         },
         Label {

@@ -1,13 +1,22 @@
+#![allow(dead_code)]
+
 extern crate common;
+extern crate either;
 
 use common::bytecode::Inst;
+use common::SyncMut;
+use either::*;
 use std::collections::HashMap;
 use std::mem::replace;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard};
 
+pub struct ExecutionEngine {
+    tasks: Vec<ExecutionContext>,
+}
+
 pub struct NativeFunctionData {
-    fun: Box<Fn(Option<SyncValue>, Vec<SyncValue>) -> SyncValue>,
+    fun: Arc<Fn(Option<SyncValue>, Vec<SyncValue>) -> SyncValue>,
 }
 
 pub struct InterpretedFunctionData {
@@ -48,11 +57,44 @@ pub enum Value {
     Nothing,
 }
 
-type SyncValue = Arc<Mutex<Value>>;
+type SyncValue = SyncMut<Value>;
 
 impl From<Value> for SyncValue {
     fn from(value: Value) -> Self {
         Arc::from(Mutex::new(value))
+    }
+}
+
+fn search_value_from_context(
+    context: SyncMut<ExecutionContext>,
+    name: &str,
+) -> Option<(SyncMut<ExecutionContext>, SyncValue)> {
+    let result: Option<SyncValue> = {
+        context
+            .lock()
+            .expect("Could not lock execution context!")
+            .stack
+            .get(name)
+            .map(|value| value.clone())
+    };
+
+    match result {
+        Some(value_ref) => return Some((context, value_ref)),
+        _ => (),
+    };
+
+    let parent_context: Option<SyncMut<ExecutionContext>> = {
+        context
+            .lock()
+            .expect("Could not lock execution context!")
+            .parent_context
+            .as_ref()
+            .map(|context| context.clone())
+    };
+
+    match parent_context {
+        Some(parent) => search_value_from_context(parent, name),
+        None => None,
     }
 }
 
@@ -90,19 +132,20 @@ impl ExecutionContext {
         }
     }
 
-    fn get_value(&self, name: &str) -> Option<SyncValue> {
+    fn get_value(
+        &self,
+        name: &str,
+    ) -> Option<Either<SyncValue, (SyncMut<ExecutionContext>, SyncValue)>> {
         let result: Option<&SyncValue> = self.stack.get(name);
         match result {
-            Some(value_ref) => return Some(value_ref.clone()),
+            Some(value_ref) => return Some(Left(value_ref.clone())),
             _ => (),
         }
 
-        let context_ref: &Option<Arc<Mutex<ExecutionContext>>> = &self.parent_context;
-        match context_ref {
-            Some(context_mutex) => context_mutex
-                .lock()
-                .expect("Could not lock execution context!")
-                .get_value(name),
+        let parent_context: Option<Arc<Mutex<ExecutionContext>>> =
+            self.parent_context.as_ref().map(|parent| parent.clone());
+        match parent_context {
+            Some(parent) => search_value_from_context(parent, name).map(|val| Right(val)),
             None => None,
         }
     }
@@ -127,7 +170,7 @@ impl ExecutionContext {
         self.stack.insert(name, value);
     }
 
-    fn run(&mut self) {
+    fn run(&mut self, engine: SyncMut<ExecutionEngine>) {
         let current_instruction: Inst = self
             .program
             .instructions
@@ -221,7 +264,42 @@ impl ExecutionContext {
         object_name: String,
         key_name: String,
     ) {
+        let object_value = self
+            .get_value(&object_name)
+            .expect("Could not find object to pop key from!")
+            .either(|value| value, |value_and_stack| value_and_stack.1);
 
+        let target_value_and_stack = self
+            .get_value(&pop_to_name)
+            .expect("Could not find value to place popped value into!");
+
+        if let Left(value) = target_value_and_stack {
+            let object_lock = object_value.lock().expect("Could not lock object!");
+            let popped_value = if let Value::Object(map) = object_lock.deref() {
+                map.get(&key_name)
+                    .map(|popped| popped.clone())
+                    .unwrap_or_else(|| Value::Nothing.into())
+            } else {
+                unimplemented!("Handle method returning etc for non-object values!")
+            };
+
+            self.stack.insert(pop_to_name, popped_value);
+        } else if let Right((stack, target_value)) = target_value_and_stack {
+            let object_lock = object_value.lock().expect("Could not lock object!");
+            let popped_value = if let Value::Object(map) = object_lock.deref() {
+                map.get(&key_name)
+                    .map(|popped| popped.clone())
+                    .unwrap_or_else(|| Value::Nothing.into())
+            } else {
+                unimplemented!("Handle method returning etc for non-object values!")
+            };
+
+            stack
+                .lock()
+                .expect("Could not lock execution context!")
+                .stack
+                .insert(pop_to_name, popped_value);;
+        }
     }
 
     fn handle_push_object_value(
@@ -230,23 +308,18 @@ impl ExecutionContext {
         key_name: String,
         value_name: String,
     ) {
-        let object_value = {
-            let object_value_ref = self
-                .get_value(&object_name)
-                .expect("Could not find object to be pushed into!");
-            object_value_ref.clone()
-        };
+        let object_value = self
+            .get_value(&object_name)
+            .expect("Could not find object to be pushed into!")
+            .either(|value| value, |value_and_stack| value_and_stack.1);
+        let mut object_lock = object_value.lock().expect("Could not lock object!");
 
-        let target_value = {
-            let target_value_ref = self
-                .get_value(&value_name)
-                .expect("Could not find value to push into object!");
-            target_value_ref.clone()
-        };
+        let target_value = self
+            .get_value(&value_name)
+            .expect("Could not find value to push into object!")
+            .either(|value| value, |value_and_stack| value_and_stack.1);
 
-        let mut object_lock: MutexGuard<Value> =
-            object_value.lock().expect("Could not lock value in stack!");
-        if let Value::Object(ref mut map) = object_lock.deref_mut() {
+        if let Value::Object(ref mut map) = *object_lock {
             map.insert(key_name, target_value);
         } else {
             panic!("Selected object is no object at all!");
@@ -278,9 +351,10 @@ impl ExecutionContext {
         true_label: Option<String>,
         false_label: Option<String>,
     ) {
-        let value = self
+        let value_and_stack = self
             .get_value(&name)
             .expect("Could not find value to branch on!");
+        let value = value_and_stack.either(|value| value, |value_and_stack| value_and_stack.1);
         let value_lock = value.lock().expect("Could not lock value!");
         let bool_value = match *value_lock {
             Value::Boolean(ref value) => *value,

@@ -1,0 +1,37 @@
+#[LALR]
+grammar(scale: i32);
+
+extern crate common;
+use common::bytecode::Inst;
+use tok;
+use ast;
+
+extern {
+    enum Tok {
+        "(" => Tok::LParen,
+        ")" => Tok::RParen,
+        "-" => Tok::Minus,
+        "+" => Tok::Plus,
+        "*" => Tok::Times,
+        "/" => Tok::Div,
+        Num => Tok::Num(<i32>),
+        Fraction => Tok::Fraction(<i32>, <i32>), // Regression test for #179
+    }
+}
+
+Expr: ast::Stmt = {
+    <l:Expr> "-" <r:Factor> => l - r => ast::Stmt::Sub,
+    <l:Expr> "+" <r:Factor> => l + r => ast::Stmt::Add,
+    Factor,
+};
+
+Factor: ast::Stmt = {
+    <l:Factor> "*" <r:Term> => l * r => ast::Stmt::Mul,
+    <l:Factor> "/" <r:Term> => l / r => ast::Stmt::Div,
+    Term,
+};
+
+Term: i32 = {
+    <n:Num> => n * scale,
+    "(" <Expr> ")",
+};

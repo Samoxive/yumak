@@ -3,10 +3,16 @@ name = "common"
 version = "0.1.0"
 
 [[package]]
+name = "either"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "engine"
 version = "0.1.0"
 dependencies = [
  "common 0.1.0",
+ "either 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -17,3 +23,5 @@ dependencies = [
  "engine 0.1.0",
 ]
 
+[metadata]
+"checksum either 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3be565ca5c557d7f59e7cfcf1844f9e3033650c929c6566f511e8005f205c1d0"

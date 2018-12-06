@@ -7,12 +7,13 @@ use common::bytecode::Inst;
 use common::SyncMut;
 use either::*;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::mem::replace;
-use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 
 pub struct ExecutionEngine {
-    tasks: Vec<ExecutionContext>,
+    tasks: VecDeque<ExecutionContext>,
 }
 
 pub struct NativeFunctionData {
@@ -102,7 +103,7 @@ pub struct ExecutionContext {
     program_counter: usize,
     program: Arc<InterpretedFunctionData>,
     stack: HashMap<String, SyncValue>,
-    parent_context: Option<Arc<Mutex<ExecutionContext>>>,
+    parent_context: Option<SyncMut<ExecutionContext>>,
     call_result: SyncValue,
 }
 
@@ -136,14 +137,13 @@ impl ExecutionContext {
         &self,
         name: &str,
     ) -> Option<Either<SyncValue, (SyncMut<ExecutionContext>, SyncValue)>> {
-        let result: Option<&SyncValue> = self.stack.get(name);
+        let result = self.stack.get(name);
         match result {
             Some(value_ref) => return Some(Left(value_ref.clone())),
             _ => (),
         }
 
-        let parent_context: Option<Arc<Mutex<ExecutionContext>>> =
-            self.parent_context.as_ref().map(|parent| parent.clone());
+        let parent_context = self.parent_context.as_ref().map(|parent| parent.clone());
         match parent_context {
             Some(parent) => search_value_from_context(parent, name).map(|val| Right(val)),
             None => None,
@@ -244,8 +244,10 @@ impl ExecutionContext {
             Value::InterpretedFunction(InterpretedFunctionData::from_argument_and_instructions(
                 argument_names,
                 instructions,
-            )).into(),
-        ).unwrap();
+            ))
+            .into(),
+        )
+        .unwrap();
     }
 
     fn handle_push_list(&mut self, name: String) {

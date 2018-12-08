@@ -12,7 +12,7 @@ use std::mem::replace;
 use std::sync::{Arc, Mutex};
 
 pub struct ExecutionEngine {
-    tasks: VecDeque<ExecutionContext>,
+    tasks: VecDeque<SyncMut<ExecutionContext>>,
 }
 
 pub struct NativeFunctionData {
@@ -138,7 +138,7 @@ impl ExecutionContext {
         }
     }
 
-    fn get_value(
+    fn get_value_and_stack(
         &self,
         name: &str,
     ) -> Option<Either<RcValue, (SyncMut<ExecutionContext>, RcValue)>> {
@@ -153,6 +153,12 @@ impl ExecutionContext {
             Some(parent) => search_value_from_context(parent, name).map(|val| Right(val)),
             None => None,
         }
+    }
+
+    fn get_value(&self, name: &str) -> Option<RcValue> {
+        self.get_value_and_stack(name).map(|value_and_stack| {
+            value_and_stack.either(|value| value, |value_and_stack| value_and_stack.1)
+        })
     }
 
     fn set_value(&mut self, name: String, value: RcValue) -> Result<(), ()> {
@@ -275,11 +281,10 @@ impl ExecutionContext {
     ) {
         let object_value = self
             .get_value(&object_name)
-            .expect("Could not find object to pop key from!")
-            .either(|value| value, |value_and_stack| value_and_stack.1);
+            .expect("Could not find object to pop key from!");
 
         let target_value_and_context = self
-            .get_value(&pop_to_name)
+            .get_value_and_stack(&pop_to_name)
             .expect("Could not find value to place popped value into!");
 
         if let Left(_) = target_value_and_context {
@@ -321,13 +326,11 @@ impl ExecutionContext {
     ) {
         let object_value = self
             .get_value(&object_name)
-            .expect("Could not find object to be pushed into!")
-            .either(|value| value, |value_and_stack| value_and_stack.1);
+            .expect("Could not find object to be pushed into!");
 
         let target_value = self
             .get_value(&value_name)
-            .expect("Could not find value to push into object!")
-            .either(|value| value, |value_and_stack| value_and_stack.1);
+            .expect("Could not find value to push into object!");
 
         if let Value::Object(ref map) = *object_value {
             let mut map_lock = map.lock().expect("Could not lock object's internal map!");
@@ -347,13 +350,11 @@ impl ExecutionContext {
     ) -> bool {
         let call_value = self
             .get_value(&name)
-            .expect("Could not find value to call!")
-            .either(|value| value, |value_and_stack| value_and_stack.1);
+            .expect("Could not find value to call!");
 
         let this_value_option: Option<RcValue> = if let Some(this_value_name) = this {
             self.get_value(&this_value_name)
                 .expect("Could not find value to set as `this` for called function!")
-                .either(|value| value, |value_and_stack| value_and_stack.1)
                 .into()
         } else {
             None
@@ -370,9 +371,8 @@ impl ExecutionContext {
             for (i, pass_value_name) in arguments.iter().enumerate() {
                 if let Some(argument_name) = interpreted_function.argument_names.get(i) {
                     let pass_value = self
-                        .get_value(argument_name)
-                        .expect("Could not find value to pass to function!")
-                        .either(|value| value, |value_and_stack| value_and_stack.1);
+                        .get_value(pass_value_name)
+                        .expect("Could not find value to pass to function!");
                     new_context.stack.insert(argument_name.clone(), pass_value);
                 } else {
                     break;
@@ -383,7 +383,9 @@ impl ExecutionContext {
                 new_context.stack.insert("this".into(), this_value);
             }
 
-            engine_lock.tasks.push_back(new_context);
+            engine_lock
+                .tasks
+                .push_back(Arc::new(Mutex::new(new_context)));
             return false;
         } else if let Value::NativeFunction(ref native_function) = *call_value {
             let result_value = (native_function.fun)(
@@ -393,7 +395,6 @@ impl ExecutionContext {
                     .map(|argument_name| {
                         self.get_value(&argument_name)
                             .expect("Could not find value to pass to function!")
-                            .either(|value| value, |value_and_stack| value_and_stack.1)
                     })
                     .collect(),
             );
@@ -427,10 +428,10 @@ impl ExecutionContext {
         true_label: Option<String>,
         false_label: Option<String>,
     ) {
-        let value_and_stack = self
+        let value = self
             .get_value(&name)
             .expect("Could not find value to branch on!");
-        let value = value_and_stack.either(|value| value, |value_and_stack| value_and_stack.1);
+
         let bool_value = match *value {
             Value::Boolean(ref bool_value) => *bool_value,
             _ => panic!("Value to branch on is not a boolean!"),
@@ -453,5 +454,24 @@ impl ExecutionContext {
         }
     }
 
-    fn handle_return(&mut self, name: String) {}
+    fn ret(&mut self, engine: SyncMut<ExecutionEngine>, return_value_option: Option<RcValue>) {
+        let mut engine_lock = engine.lock().expect("Could not lock execution engine!");
+        if let Some(ref context) = self.parent_context {
+            let context_lock = context.lock().expect("Could not lock parent context!");
+            context_lock.call_result = if let Some(return_value) = return_value_option {
+                return_value
+            } else {
+                Value::Nothing.into()
+            };
+
+            engine_lock.tasks.push_back(context.clone())
+        }
+    }
+
+    fn handle_return(&mut self, engine: SyncMut<ExecutionEngine>, name: String) {
+        let return_value = self
+            .get_value(&name)
+            .expect("Could not get value to return!");
+        self.ret(engine, return_value.into())
+    }
 }

@@ -9,7 +9,6 @@ use either::*;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::mem::replace;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 pub struct ExecutionEngine {
@@ -17,12 +16,13 @@ pub struct ExecutionEngine {
 }
 
 pub struct NativeFunctionData {
-    fun: Arc<Fn(Option<SyncValue>, Vec<SyncValue>) -> SyncValue>,
+    fun: Arc<Fn(Option<RcValue>, Vec<RcValue>) -> RcValue>,
 }
 
+#[derive(Clone)]
 pub struct InterpretedFunctionData {
     argument_names: Arc<Vec<String>>,
-    label_points: HashMap<String, usize>,
+    label_points: Arc<HashMap<String, usize>>,
     instructions: Arc<Vec<Inst>>,
 }
 
@@ -40,7 +40,7 @@ impl InterpretedFunctionData {
 
         InterpretedFunctionData {
             argument_names,
-            label_points,
+            label_points: label_points.into(),
             instructions,
         }
     }
@@ -51,26 +51,20 @@ pub enum Value {
     Integer(i64),
     Float(f64),
     String(String),
-    List(Vec<Value>),
-    Object(HashMap<String, SyncValue>),
+    List(Mutex<Vec<Value>>),
+    Object(Mutex<HashMap<String, RcValue>>),
     NativeFunction(Arc<NativeFunctionData>),
     InterpretedFunction(InterpretedFunctionData),
     Nothing,
 }
 
-type SyncValue = SyncMut<Value>;
-
-impl From<Value> for SyncValue {
-    fn from(value: Value) -> Self {
-        Arc::from(Mutex::new(value))
-    }
-}
+type RcValue = Arc<Value>;
 
 fn search_value_from_context(
     context: SyncMut<ExecutionContext>,
     name: &str,
-) -> Option<(SyncMut<ExecutionContext>, SyncValue)> {
-    let result: Option<SyncValue> = {
+) -> Option<(SyncMut<ExecutionContext>, RcValue)> {
+    let result: Option<RcValue> = {
         context
             .lock()
             .expect("Could not lock execution context!")
@@ -101,10 +95,10 @@ fn search_value_from_context(
 
 pub struct ExecutionContext {
     program_counter: usize,
-    program: Arc<InterpretedFunctionData>,
-    stack: HashMap<String, SyncValue>,
+    program: InterpretedFunctionData,
+    stack: HashMap<String, RcValue>,
     parent_context: Option<SyncMut<ExecutionContext>>,
-    call_result: SyncValue,
+    call_result: RcValue,
 }
 
 impl ExecutionContext {
@@ -116,14 +110,12 @@ impl ExecutionContext {
             }
         }
 
-        let function_data = InterpretedFunctionData {
+        let program = InterpretedFunctionData {
             argument_names: Arc::new(vec![]),
-            label_points,
+            label_points: label_points.into(),
             instructions: Arc::new(instructions),
         };
 
-        let function_box = Box::from(function_data);
-        let program = Arc::from(function_box);
         ExecutionContext {
             program_counter: 0,
             program,
@@ -133,10 +125,23 @@ impl ExecutionContext {
         }
     }
 
+    fn from_interpreted_function_call(
+        interpreted_function: InterpretedFunctionData,
+        parent_context: Option<SyncMut<ExecutionContext>>,
+    ) -> ExecutionContext {
+        ExecutionContext {
+            program_counter: 0,
+            program: interpreted_function,
+            stack: HashMap::new(),
+            parent_context,
+            call_result: Value::Nothing.into(),
+        }
+    }
+
     fn get_value(
         &self,
         name: &str,
-    ) -> Option<Either<SyncValue, (SyncMut<ExecutionContext>, SyncValue)>> {
+    ) -> Option<Either<RcValue, (SyncMut<ExecutionContext>, RcValue)>> {
         let result = self.stack.get(name);
         match result {
             Some(value_ref) => return Some(Left(value_ref.clone())),
@@ -150,7 +155,7 @@ impl ExecutionContext {
         }
     }
 
-    fn set_value(&mut self, name: String, value: SyncValue) -> Result<(), ()> {
+    fn set_value(&mut self, name: String, value: RcValue) -> Result<(), ()> {
         if self.stack.get(&name).is_some() {
             self.stack.insert(name, value);
             return Ok(());
@@ -166,11 +171,11 @@ impl ExecutionContext {
         }
     }
 
-    fn insert_value(&mut self, name: String, value: SyncValue) {
+    fn insert_value(&mut self, name: String, value: RcValue) {
         self.stack.insert(name, value);
     }
 
-    fn run(&mut self, engine: SyncMut<ExecutionEngine>) {
+    fn run(&mut self, engine: SyncMut<ExecutionEngine>, this_context: SyncMut<ExecutionContext>) {
         let current_instruction: Inst = self
             .program
             .instructions
@@ -204,7 +209,9 @@ impl ExecutionContext {
                 name,
                 arguments,
                 this,
-            } => self.handle_call(name, arguments, this),
+            } => {
+                self.handle_call(engine.clone(), this_context, name, arguments, this);
+            }
             Inst::PushCallResult { name } => self.handle_push_call_result(name),
             Inst::Label { name } => self.handle_label(name),
             Inst::GoTo { name } => self.handle_goto(name),
@@ -251,12 +258,12 @@ impl ExecutionContext {
     }
 
     fn handle_push_list(&mut self, name: String) {
-        self.set_value(name, Value::List(Vec::new()).into())
+        self.set_value(name, Value::List(Mutex::new(Vec::new())).into())
             .unwrap();
     }
 
     fn handle_push_object(&mut self, name: String) {
-        self.set_value(name, Value::Object(HashMap::new()).into())
+        self.set_value(name, Value::Object(Mutex::new(HashMap::new())).into())
             .unwrap();
     }
 
@@ -271,14 +278,15 @@ impl ExecutionContext {
             .expect("Could not find object to pop key from!")
             .either(|value| value, |value_and_stack| value_and_stack.1);
 
-        let target_value_and_stack = self
+        let target_value_and_context = self
             .get_value(&pop_to_name)
             .expect("Could not find value to place popped value into!");
 
-        if let Left(value) = target_value_and_stack {
-            let object_lock = object_value.lock().expect("Could not lock object!");
-            let popped_value = if let Value::Object(map) = object_lock.deref() {
-                map.get(&key_name)
+        if let Left(_) = target_value_and_context {
+            let popped_value = if let Value::Object(ref map) = *object_value {
+                let map_lock = map.lock().expect("Could not lock object's internal map!");
+                map_lock
+                    .get(&key_name)
                     .map(|popped| popped.clone())
                     .unwrap_or_else(|| Value::Nothing.into())
             } else {
@@ -286,17 +294,18 @@ impl ExecutionContext {
             };
 
             self.stack.insert(pop_to_name, popped_value);
-        } else if let Right((stack, target_value)) = target_value_and_stack {
-            let object_lock = object_value.lock().expect("Could not lock object!");
-            let popped_value = if let Value::Object(map) = object_lock.deref() {
-                map.get(&key_name)
+        } else if let Right((context, _)) = target_value_and_context {
+            let popped_value = if let Value::Object(ref map) = *object_value {
+                let map_lock = map.lock().expect("Could not lock object's internal map!");
+                map_lock
+                    .get(&key_name)
                     .map(|popped| popped.clone())
                     .unwrap_or_else(|| Value::Nothing.into())
             } else {
                 unimplemented!("Handle method returning etc for non-object values!")
             };
 
-            stack
+            context
                 .lock()
                 .expect("Could not lock execution context!")
                 .stack
@@ -314,28 +323,93 @@ impl ExecutionContext {
             .get_value(&object_name)
             .expect("Could not find object to be pushed into!")
             .either(|value| value, |value_and_stack| value_and_stack.1);
-        let mut object_lock = object_value.lock().expect("Could not lock object!");
 
         let target_value = self
             .get_value(&value_name)
             .expect("Could not find value to push into object!")
             .either(|value| value, |value_and_stack| value_and_stack.1);
 
-        if let Value::Object(ref mut map) = *object_lock {
-            map.insert(key_name, target_value);
+        if let Value::Object(ref map) = *object_value {
+            let mut map_lock = map.lock().expect("Could not lock object's internal map!");
+            map_lock.insert(key_name, target_value);
         } else {
             panic!("Selected object is no object at all!");
         }
     }
 
-    fn handle_call(&mut self, name: String, arguments: Arc<Vec<String>>, this: Option<String>) {}
+    fn handle_call(
+        &mut self,
+        engine: SyncMut<ExecutionEngine>,
+        this_context: SyncMut<ExecutionContext>,
+        name: String,
+        arguments: Arc<Vec<String>>,
+        this: Option<String>,
+    ) -> bool {
+        let call_value = self
+            .get_value(&name)
+            .expect("Could not find value to call!")
+            .either(|value| value, |value_and_stack| value_and_stack.1);
+
+        let this_value_option: Option<RcValue> = if let Some(this_value_name) = this {
+            self.get_value(&this_value_name)
+                .expect("Could not find value to set as `this` for called function!")
+                .either(|value| value, |value_and_stack| value_and_stack.1)
+                .into()
+        } else {
+            None
+        };
+
+        self.program_counter += 1;
+        if let Value::InterpretedFunction(ref interpreted_function) = *call_value {
+            let mut engine_lock = engine.lock().expect("Could not lock execution engine!");
+            let function_clone = interpreted_function.clone();
+            let mut new_context = ExecutionContext::from_interpreted_function_call(
+                function_clone,
+                this_context.into(),
+            );
+            for (i, pass_value_name) in arguments.iter().enumerate() {
+                if let Some(argument_name) = interpreted_function.argument_names.get(i) {
+                    let pass_value = self
+                        .get_value(argument_name)
+                        .expect("Could not find value to pass to function!")
+                        .either(|value| value, |value_and_stack| value_and_stack.1);
+                    new_context.stack.insert(argument_name.clone(), pass_value);
+                } else {
+                    break;
+                }
+            }
+
+            if let Some(this_value) = this_value_option {
+                new_context.stack.insert("this".into(), this_value);
+            }
+
+            engine_lock.tasks.push_back(new_context);
+            return false;
+        } else if let Value::NativeFunction(ref native_function) = *call_value {
+            let result_value = (native_function.fun)(
+                this_value_option,
+                arguments
+                    .iter()
+                    .map(|argument_name| {
+                        self.get_value(&argument_name)
+                            .expect("Could not find value to pass to function!")
+                            .either(|value| value, |value_and_stack| value_and_stack.1)
+                    })
+                    .collect(),
+            );
+            self.call_result = result_value;
+            return true;
+        } else {
+            panic!("Value called wasn't a function!");
+        }
+    }
 
     fn handle_push_call_result(&mut self, name: String) {
         let call_result = replace(&mut self.call_result, Value::Nothing.into());
         self.set_value(name, call_result).unwrap()
     }
 
-    fn handle_label(&mut self, name: String) {
+    fn handle_label(&mut self, _name: String) {
         // nada
     }
 
@@ -357,9 +431,8 @@ impl ExecutionContext {
             .get_value(&name)
             .expect("Could not find value to branch on!");
         let value = value_and_stack.either(|value| value, |value_and_stack| value_and_stack.1);
-        let value_lock = value.lock().expect("Could not lock value!");
-        let bool_value = match *value_lock {
-            Value::Boolean(ref value) => *value,
+        let bool_value = match *value {
+            Value::Boolean(ref bool_value) => *bool_value,
             _ => panic!("Value to branch on is not a boolean!"),
         };
 

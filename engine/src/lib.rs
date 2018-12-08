@@ -226,7 +226,7 @@ impl ExecutionContext {
                 true_label,
                 false_label,
             } => self.handle_branch(name, true_label, false_label),
-            Inst::Return { name } => self.handle_return(name),
+            Inst::Return { name } => self.handle_return(engine.clone(), name),
         }
     }
 
@@ -457,7 +457,7 @@ impl ExecutionContext {
     fn ret(&mut self, engine: SyncMut<ExecutionEngine>, return_value_option: Option<RcValue>) {
         let mut engine_lock = engine.lock().expect("Could not lock execution engine!");
         if let Some(ref context) = self.parent_context {
-            let context_lock = context.lock().expect("Could not lock parent context!");
+            let mut context_lock = context.lock().expect("Could not lock parent context!");
             context_lock.call_result = if let Some(return_value) = return_value_option {
                 return_value
             } else {

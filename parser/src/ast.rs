@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum Stmt {
+pub enum Defs {
     Push(Int),
     Dup,
     Swap,
@@ -28,3 +28,5 @@ pub enum Stmt {
     ReadChar,
     ReadNum,
 }
+
+Call(Mul(2,3))

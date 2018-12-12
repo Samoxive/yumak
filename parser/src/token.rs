@@ -4,15 +4,60 @@ use std::str::FromStr;
 pub struct NoCloneTok(pub Tok);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Tok {
+pub enum Token {
     Num(i32),
-    LParen,
-    RParen,
-    Minus,
-    Plus,
-    Times,
-    Div,
+
+    ShebangLine(&'input str),
+    Identifier(&'input str),
+    Operator(&'input str),
+
+    StringLiteral(String),
+    CharLiteral(char),
+    IntLiteral(i64),
+    ByteLiteral(u8),
+    FloatLiteral(f64),
+    DocComment(Comment),
+
+    Rec,
+    Else,
+    Forall,
+    If,
+    In,
+    Let,
+    Do,
+    Match,
+    Then,
+    Type,
+    With,
+    While,
+    For,
+
+    At,
+    Colon,
     Comma,
+    Dot,
+    DotDot,
+    Equals,
+    Lambda,
+    Pipe,
+    RArrow,
+    Question,
+
+    LBrace,
+    LBracket,
+    LParen,
+    RBrace,
+    RBracket,
+    RParen,
+
+    OpenBlock,
+    CloseBlock,
+    Semi,
+
+    AttributeOpen,
+
+    EOF, // Required for the layout algorithm
+
     #[allow(dead_code)]
     Fraction(i32, i32), // Not produced by tokenizer, used only in regression tests for #179
 }

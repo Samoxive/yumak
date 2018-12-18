@@ -2,14 +2,18 @@
 
 extern crate common;
 extern crate either;
+extern crate failure;
 
 use common::bytecode::Inst;
 use common::SyncMut;
 use either::*;
+use failure::{format_err, Error};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
+
+type ExecutionResult = Result<(), Error>;
 
 pub struct ExecutionEngine {
     tasks: VecDeque<SyncMut<ExecutionContext>>,
@@ -70,12 +74,11 @@ fn search_value_from_context(
             .expect("Could not lock execution context!")
             .stack
             .get(name)
-            .map(|value| value.clone())
+            .cloned()
     };
 
-    match result {
-        Some(value_ref) => return Some((context, value_ref)),
-        _ => (),
+    if let Some(value_ref) = result {
+        return Some((context, value_ref));
     };
 
     let parent_context: Option<SyncMut<ExecutionContext>> = {
@@ -84,7 +87,7 @@ fn search_value_from_context(
             .expect("Could not lock execution context!")
             .parent_context
             .as_ref()
-            .map(|context| context.clone())
+            .cloned()
     };
 
     match parent_context {
@@ -143,37 +146,38 @@ impl ExecutionContext {
         name: &str,
     ) -> Option<Either<RcValue, (SyncMut<ExecutionContext>, RcValue)>> {
         let result = self.stack.get(name);
-        match result {
-            Some(value_ref) => return Some(Left(value_ref.clone())),
-            _ => (),
+        if let Some(value_ref) = result {
+            return Some(Left(value_ref.clone()));
         }
 
-        let parent_context = self.parent_context.as_ref().map(|parent| parent.clone());
+        let parent_context = self.parent_context.as_ref().cloned();
         match parent_context {
-            Some(parent) => search_value_from_context(parent, name).map(|val| Right(val)),
+            Some(parent) => search_value_from_context(parent, name).map(Right),
             None => None,
         }
     }
 
-    fn get_value(&self, name: &str) -> Option<RcValue> {
-        self.get_value_and_stack(name).map(|value_and_stack| {
+    fn get_value(&self, name: &str) -> Result<RcValue, Error> {
+        let value_option = self.get_value_and_stack(name).map(|value_and_stack| {
             value_and_stack.either(|value| value, |value_and_stack| value_and_stack.1)
-        })
+        });
+        if let Some(value) = value_option {
+            Ok(value)
+        } else {
+            Err(format_err!("Could not find value with given name!"))
+        }
     }
 
-    fn set_value(&mut self, name: String, value: RcValue) -> Result<(), ()> {
+    fn set_value(&mut self, name: String, value: RcValue) -> ExecutionResult {
         if self.stack.get(&name).is_some() {
             self.stack.insert(name, value);
             return Ok(());
         }
 
         if let Some(ref context_mutex) = self.parent_context {
-            context_mutex
-                .lock()
-                .expect("Could not lock execution context!")
-                .set_value(name, value)
+            context_mutex.lock().unwrap().set_value(name, value)
         } else {
-            Err(())
+            Err(format_err!("No such value exists!"))
         }
     }
 
@@ -181,7 +185,11 @@ impl ExecutionContext {
         self.stack.insert(name, value);
     }
 
-    fn run(&mut self, engine: SyncMut<ExecutionEngine>, this_context: SyncMut<ExecutionContext>) {
+    fn run(
+        &mut self,
+        engine: SyncMut<ExecutionEngine>,
+        this_context: SyncMut<ExecutionContext>,
+    ) -> ExecutionResult {
         let current_instruction: Inst = self
             .program
             .instructions
@@ -191,59 +199,61 @@ impl ExecutionContext {
 
         match current_instruction {
             Inst::Alloc { name } => self.handle_alloc(name),
-            Inst::PushInt { name, value } => self.handle_push_int(name, value),
-            Inst::PushFloat { name, value } => self.handle_push_float(name, value),
-            Inst::PushBoolean { name, value } => self.handle_push_boolean(name, value),
+            Inst::PushInt { name, value } => self.handle_push_int(name, value)?,
+            Inst::PushFloat { name, value } => self.handle_push_float(name, value)?,
+            Inst::PushBoolean { name, value } => self.handle_push_boolean(name, value)?,
             Inst::PushFunction {
                 name,
                 argument_names,
                 instructions,
-            } => self.handle_push_function(name, argument_names, instructions),
-            Inst::PushList { name } => self.handle_push_list(name),
-            Inst::PushObject { name } => self.handle_push_object(name),
+            } => self.handle_push_function(name, argument_names, instructions)?,
+            Inst::PushList { name } => self.handle_push_list(name)?,
+            Inst::PushObject { name } => self.handle_push_object(name)?,
             Inst::PopObjectValue {
                 pop_to_name,
                 object_name,
                 key_name,
-            } => self.handle_pop_object_value(pop_to_name, object_name, key_name),
+            } => self.handle_pop_object_value(pop_to_name, object_name, key_name)?,
             Inst::PushObjectValue {
                 object_name,
                 key_name,
                 value_name,
-            } => self.handle_push_object_value(object_name, key_name, value_name),
+            } => self.handle_push_object_value(object_name, key_name, value_name)?,
             Inst::Call {
                 name,
                 arguments,
                 this,
             } => {
-                self.handle_call(engine.clone(), this_context, name, arguments, this);
+                self.handle_call(engine.clone(), this_context, name, arguments, this)?;
             }
-            Inst::PushCallResult { name } => self.handle_push_call_result(name),
+            Inst::PushCallResult { name } => self.handle_push_call_result(name)?,
             Inst::Label { name } => self.handle_label(name),
-            Inst::GoTo { name } => self.handle_goto(name),
+            Inst::GoTo { name } => self.handle_goto(name)?,
             Inst::Branch {
                 name,
                 true_label,
                 false_label,
-            } => self.handle_branch(name, true_label, false_label),
-            Inst::Return { name } => self.handle_return(engine.clone(), name),
+            } => self.handle_branch(name, true_label, false_label)?,
+            Inst::Return { name } => self.handle_return(engine.clone(), name)?,
         }
+
+        Ok(())
     }
 
     fn handle_alloc(&mut self, name: String) {
         self.insert_value(name, Value::Nothing.into());
     }
 
-    fn handle_push_int(&mut self, name: String, value: i64) {
-        self.set_value(name, Value::Integer(value).into()).unwrap();
+    fn handle_push_int(&mut self, name: String, value: i64) -> ExecutionResult {
+        self.set_value(name, Value::Integer(value).into())
     }
 
-    fn handle_push_float(&mut self, name: String, value: f64) {
-        self.set_value(name, Value::Float(value).into()).unwrap();
+    fn handle_push_float(&mut self, name: String, value: f64) -> ExecutionResult {
+        self.set_value(name, Value::Float(value).into())
     }
 
-    fn handle_push_boolean(&mut self, name: String, value: bool) {
-        self.set_value(name, Value::Boolean(value).into()).unwrap();
+    fn handle_push_boolean(&mut self, name: String, value: bool) -> ExecutionResult {
+        self.set_value(name, Value::Boolean(value).into())
     }
 
     fn handle_push_function(
@@ -251,7 +261,7 @@ impl ExecutionContext {
         name: String,
         argument_names: Arc<Vec<String>>,
         instructions: Arc<Vec<Inst>>,
-    ) {
+    ) -> ExecutionResult {
         self.set_value(
             name,
             Value::InterpretedFunction(InterpretedFunctionData::from_argument_and_instructions(
@@ -260,17 +270,14 @@ impl ExecutionContext {
             ))
             .into(),
         )
-        .unwrap();
     }
 
-    fn handle_push_list(&mut self, name: String) {
+    fn handle_push_list(&mut self, name: String) -> ExecutionResult {
         self.set_value(name, Value::List(Mutex::new(Vec::new())).into())
-            .unwrap();
     }
 
-    fn handle_push_object(&mut self, name: String) {
+    fn handle_push_object(&mut self, name: String) -> ExecutionResult {
         self.set_value(name, Value::Object(Mutex::new(HashMap::new())).into())
-            .unwrap();
     }
 
     fn handle_pop_object_value(
@@ -278,44 +285,20 @@ impl ExecutionContext {
         pop_to_name: String,
         object_name: String,
         key_name: String,
-    ) {
-        let object_value = self
-            .get_value(&object_name)
-            .expect("Could not find object to pop key from!");
+    ) -> ExecutionResult {
+        let object_value = self.get_value(&object_name)?;
 
-        let target_value_and_context = self
-            .get_value_and_stack(&pop_to_name)
-            .expect("Could not find value to place popped value into!");
+        let popped_value = if let Value::Object(ref map) = *object_value {
+            let map_lock = map.lock().unwrap();
+            map_lock
+                .get(&key_name)
+                .cloned()
+                .unwrap_or_else(|| Value::Nothing.into())
+        } else {
+            unimplemented!("Handle methods of non-object values!");
+        };
 
-        if let Left(_) = target_value_and_context {
-            let popped_value = if let Value::Object(ref map) = *object_value {
-                let map_lock = map.lock().expect("Could not lock object's internal map!");
-                map_lock
-                    .get(&key_name)
-                    .map(|popped| popped.clone())
-                    .unwrap_or_else(|| Value::Nothing.into())
-            } else {
-                unimplemented!("Handle method returning etc for non-object values!")
-            };
-
-            self.stack.insert(pop_to_name, popped_value);
-        } else if let Right((context, _)) = target_value_and_context {
-            let popped_value = if let Value::Object(ref map) = *object_value {
-                let map_lock = map.lock().expect("Could not lock object's internal map!");
-                map_lock
-                    .get(&key_name)
-                    .map(|popped| popped.clone())
-                    .unwrap_or_else(|| Value::Nothing.into())
-            } else {
-                unimplemented!("Handle method returning etc for non-object values!")
-            };
-
-            context
-                .lock()
-                .expect("Could not lock execution context!")
-                .stack
-                .insert(pop_to_name, popped_value);;
-        }
+        self.set_value(pop_to_name, popped_value)
     }
 
     fn handle_push_object_value(
@@ -323,20 +306,17 @@ impl ExecutionContext {
         object_name: String,
         key_name: String,
         value_name: String,
-    ) {
-        let object_value = self
-            .get_value(&object_name)
-            .expect("Could not find object to be pushed into!");
+    ) -> ExecutionResult {
+        let object_value = self.get_value(&object_name)?;
 
-        let target_value = self
-            .get_value(&value_name)
-            .expect("Could not find value to push into object!");
+        let target_value = self.get_value(&value_name)?;
 
         if let Value::Object(ref map) = *object_value {
-            let mut map_lock = map.lock().expect("Could not lock object's internal map!");
+            let mut map_lock = map.lock().unwrap();
             map_lock.insert(key_name, target_value);
+            Ok(())
         } else {
-            panic!("Selected object is no object at all!");
+            Err(format_err!("Selected object is no object at all!"))
         }
     }
 
@@ -347,22 +327,18 @@ impl ExecutionContext {
         name: String,
         arguments: Arc<Vec<String>>,
         this: Option<String>,
-    ) -> bool {
-        let call_value = self
-            .get_value(&name)
-            .expect("Could not find value to call!");
+    ) -> Result<bool, Error> {
+        let call_value = self.get_value(&name)?;
 
         let this_value_option: Option<RcValue> = if let Some(this_value_name) = this {
-            self.get_value(&this_value_name)
-                .expect("Could not find value to set as `this` for called function!")
-                .into()
+            self.get_value(&this_value_name)?.into()
         } else {
             None
         };
 
         self.program_counter += 1;
         if let Value::InterpretedFunction(ref interpreted_function) = *call_value {
-            let mut engine_lock = engine.lock().expect("Could not lock execution engine!");
+            let mut engine_lock = engine.lock().unwrap();
             let function_clone = interpreted_function.clone();
             let mut new_context = ExecutionContext::from_interpreted_function_call(
                 function_clone,
@@ -370,9 +346,7 @@ impl ExecutionContext {
             );
             for (i, pass_value_name) in arguments.iter().enumerate() {
                 if let Some(argument_name) = interpreted_function.argument_names.get(i) {
-                    let pass_value = self
-                        .get_value(pass_value_name)
-                        .expect("Could not find value to pass to function!");
+                    let pass_value = self.get_value(pass_value_name)?;
                     new_context.stack.insert(argument_name.clone(), pass_value);
                 } else {
                     break;
@@ -386,7 +360,7 @@ impl ExecutionContext {
             engine_lock
                 .tasks
                 .push_back(Arc::new(Mutex::new(new_context)));
-            return false;
+            return Ok(false);
         } else if let Value::NativeFunction(ref native_function) = *call_value {
             let result_value = (native_function.fun)(
                 this_value_option,
@@ -399,27 +373,29 @@ impl ExecutionContext {
                     .collect(),
             );
             self.call_result = result_value;
-            return true;
+            Ok(true)
         } else {
-            panic!("Value called wasn't a function!");
+            Err(format_err!("Value called wasn't a function!"))
         }
     }
 
-    fn handle_push_call_result(&mut self, name: String) {
+    fn handle_push_call_result(&mut self, name: String) -> ExecutionResult {
         let call_result = replace(&mut self.call_result, Value::Nothing.into());
-        self.set_value(name, call_result).unwrap()
+        self.set_value(name, call_result)
     }
 
     fn handle_label(&mut self, _name: String) {
         // nada
     }
 
-    fn handle_goto(&mut self, name: String) {
-        self.program_counter = *self
-            .program
-            .label_points
-            .get(&name)
-            .expect("Label to goto could not be found!");
+    fn handle_goto(&mut self, name: String) -> ExecutionResult {
+        let pc_option = self.program.label_points.get(&name);
+        if let Some(pc) = pc_option {
+            self.program_counter = *pc;
+            Ok(())
+        } else {
+            Err(format_err!("Invalid label to goto!"))
+        }
     }
 
     fn handle_branch(
@@ -427,37 +403,41 @@ impl ExecutionContext {
         name: String,
         true_label: Option<String>,
         false_label: Option<String>,
-    ) {
-        let value = self
-            .get_value(&name)
-            .expect("Could not find value to branch on!");
+    ) -> ExecutionResult {
+        let value = self.get_value(&name)?;
 
         let bool_value = match *value {
             Value::Boolean(ref bool_value) => *bool_value,
-            _ => panic!("Value to branch on is not a boolean!"),
+            _ => return Err(format_err!("Value to branch on is not a boolean!")),
         };
 
         if true_label.is_none() && false_label.is_none() {
-            panic!("There is no labels to branch to!");
+            return Err(format_err!("There is no labels to branch to!"));
         }
 
         if bool_value {
             match true_label {
-                Some(label) => self.handle_goto(label),
+                Some(label) => self.handle_goto(label)?,
                 None => self.program_counter += 1,
             }
         } else {
             match false_label {
-                Some(label) => self.handle_goto(label),
+                Some(label) => self.handle_goto(label)?,
                 None => self.program_counter += 1,
             }
         }
+
+        Ok(())
     }
 
-    fn ret(&mut self, engine: SyncMut<ExecutionEngine>, return_value_option: Option<RcValue>) {
-        let mut engine_lock = engine.lock().expect("Could not lock execution engine!");
+    fn ret(
+        &mut self,
+        engine: SyncMut<ExecutionEngine>,
+        return_value_option: Option<RcValue>,
+    ) -> ExecutionResult {
+        let mut engine_lock = engine.lock().unwrap();
         if let Some(ref context) = self.parent_context {
-            let mut context_lock = context.lock().expect("Could not lock parent context!");
+            let mut context_lock = context.lock().unwrap();
             context_lock.call_result = if let Some(return_value) = return_value_option {
                 return_value
             } else {
@@ -466,12 +446,12 @@ impl ExecutionContext {
 
             engine_lock.tasks.push_back(context.clone())
         }
+
+        Ok(())
     }
 
-    fn handle_return(&mut self, engine: SyncMut<ExecutionEngine>, name: String) {
-        let return_value = self
-            .get_value(&name)
-            .expect("Could not get value to return!");
+    fn handle_return(&mut self, engine: SyncMut<ExecutionEngine>, name: String) -> ExecutionResult {
+        let return_value = self.get_value(&name)?;
         self.ret(engine, return_value.into())
     }
 }

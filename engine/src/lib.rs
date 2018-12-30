@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
-use failure::Error;
 
 type ExecutionResult = Result<(), Error>;
 
@@ -21,17 +20,19 @@ pub struct ExecutionEngine {
 }
 
 impl ExecutionEngine {
-    fn run(engine: SyncMut<ExecutionEngine>) -> Result<!, Error> {
+    fn run(engine: SyncMut<ExecutionEngine>) -> Result<(), Error> {
         loop {
             let task_option = {
-                let engine_lock = engine.lock()?;
+                let mut engine_lock = engine.lock().unwrap();
                 engine_lock.tasks.pop_front()
             };
 
             if let Some(task) = task_option {
-                task.lock()?.run(engine.clone(), task.clone());
+                task.lock().unwrap().run(engine.clone(), task.clone());
             }
         }
+
+        Ok(())
     }
 }
 

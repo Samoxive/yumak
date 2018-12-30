@@ -4,7 +4,7 @@ pub type SyncMut<T> = Arc<Mutex<T>>;
 
 pub mod bytecode {
     use std::sync::Arc;
-    #[derive(Clone)]
+    #[derive(PartialEq, Debug, Clone)]
     pub enum Inst {
         Alloc {
             name: String,

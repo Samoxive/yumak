@@ -162,16 +162,10 @@ impl ExecutionContext {
         name: &str,
     ) -> Option<Either<RcValue, (SyncMut<ExecutionContext>, RcValue)>> {
         let result = self.stack.get(name);
-<<<<<<< HEAD
-
-        if let Some(value_ref) = result { return Some(Left(value_ref.clone())); }
-
-=======
         if let Some(value_ref) = result {
             return Some(Left(value_ref.clone()));
         }
 
->>>>>>> 8c8a8141b8c28694ce80fe17f47f6afaa237038a
         let parent_context = self.parent_context.as_ref().cloned();
         match parent_context {
             Some(parent) => search_value_from_context(parent, name).map(Right),

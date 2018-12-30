@@ -1,122 +1,113 @@
-use std::str::FromStr;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct NoCloneTok(pub Tok);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ErrorCode {
+    UnrecognizedToken,
+    UnterminatedStringLiteral,
+    ExpectedStringLiteral,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Token {
-    Num(i32),
+pub struct Error {
+    pub location: usize,
+    pub code: ErrorCode
+}
 
-    ShebangLine(&'input str),
-    Identifier(&'input str),
-    Operator(&'input str),
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum YumakToken<'input>{
+    //StringLiteral(String),
+    //CharLiteral(char),
+    //IntLiteral(i64),
+    //ByteLiteral(u8),
+    //FloatLiteral(f64),
 
-    StringLiteral(String),
-    CharLiteral(char),
-    IntLiteral(i64),
-    ByteLiteral(u8),
-    FloatLiteral(f64),
-    DocComment(Comment),
-
-    Rec,
-    Else,
-    Forall,
+    LET,
+    VAR(&'input str),
+    NUMBER(&'input str),
+    CONST(&'input str),
+    STRING(&'input str),
+    EOF,
+    
+    Var,
+    Function,
+    Return,
     If,
-    In,
-    Let,
-    Do,
-    Match,
-    Then,
-    Type,
-    With,
+    Else,
     While,
     For,
+    True,
+    False,
 
-    At,
-    Colon,
-    Comma,
-    Dot,
-    DotDot,
-    Equals,
-    Lambda,
-    Pipe,
-    RArrow,
-    Question,
+    Plus,
+    Minus,
+    Star,
+    Slash,
 
-    LBrace,
-    LBracket,
-    LParen,
-    RBrace,
-    RBracket,
-    RParen,
+    Lparen,
+    Rparen,
+    Lbrace,
+    Rbrace,
+    Lbracket,
+    Rbracket,
 
-    OpenBlock,
-    CloseBlock,
     Semi,
+    Comma,
+    Colon,
+    Dot,
+    At,
+    ModSep,
+    
+    Eq,
+    EqEq,
+    Ne,
+        
+    Gt,
+    Lt,
+    Ge,
+    Le,
 
-    AttributeOpen,
-
-    EOF, // Required for the layout algorithm
-
-    #[allow(dead_code)]
-    Fraction(i32, i32), // Not produced by tokenizer, used only in regression tests for #179
+    Tab,
+    Space,
 }
 
-// simplest and stupidest possible tokenizer
-pub fn tokenize(s: &str) -> Vec<(usize, Tok, usize)> {
-    let mut tokens = vec![];
-    let mut chars = s.chars();
-    let mut lookahead = chars.next();
-    while let Some(c) = lookahead {
-        // skip whitespace characters
-        if !c.is_whitespace() {
-            match c {
-                '(' => tokens.push(Tok::LParen),
-                ')' => tokens.push(Tok::RParen),
-                '-' => tokens.push(Tok::Minus),
-                '+' => tokens.push(Tok::Plus),
-                '*' => tokens.push(Tok::Times),
-                ',' => tokens.push(Tok::Comma),
-                '/' => tokens.push(Tok::Div),
-                _ if c.is_digit(10) => {
-                    let (tmp, next) = take_while(c, &mut chars, |c| c.is_digit(10));
-                    lookahead = next;
-                    tokens.push(Tok::Num(i32::from_str(&tmp).unwrap()));
-                    continue;
-                }
-                _ => {
-                    panic!("invalid character: {:?}", c);
-                }
-            }
+/*impl YumakToken {
+    pub fn from_string(s: String) -> YumakToken {
+        match unsafe { s.slice_unchecked(0, s.len()) } {
+            "fn" => YumakToken::Function,
+            "let" => YumakToken::Var,
+            "return" => YumakToken::Return,
+            "if" => YumakToken::If,
+            "else" => YumakToken::Else,
+            "while" => YumakToken::While,
+            "for" => YumakToken::For,
+            "true" => YumakToken::True,
+            "false" => YumakToken::False,
+
+            "+" => YumakToken::Plus,
+            "-" => YumakToken::Minus,
+            "*" => YumakToken::Star,
+            "/" => YumakToken::Slash,
+
+            "(" => YumakToken::Lparen,
+            ")" => YumakToken::Rparen,
+            "{" => YumakToken::Lbrace,
+            "}" => YumakToken::Rbrace,
+            "[" => YumakToken::Lbracket,
+            "]" => YumakToken::Rbracket,
+
+            ";" => YumakToken::Semi,
+            "," => YumakToken::Comma,
+            ":" => YumakToken::Colon,
+            "." => YumakToken::Dot,
+            "@" => YumakToken::At,
+            "::" => YumakToken::ModSep,
+
+            "=" => YumakToken::Eq,
+            "==" => YumakToken::EqEq,
+            "!=" => YumakToken::Ne,
+
+            ">" => YumakToken::Gt,
+            "<" => YumakToken::Lt,
+            ">=" => YumakToken::Ge,
+            "<=" => YumakToken::Le,
         }
-
-        // advance to next character by default
-        lookahead = chars.next();
     }
-
-    tokens
-        .into_iter()
-        .enumerate()
-        .map(|(i, tok)| (i * 2, tok, i * 2 + 1))
-        .collect()
-}
-
-fn take_while<C, F>(c0: char, chars: &mut C, f: F) -> (String, Option<char>)
-where
-    C: Iterator<Item = char>,
-    F: Fn(char) -> bool,
-{
-    let mut buf = String::new();
-
-    buf.push(c0);
-
-    while let Some(c) = chars.next() {
-        if !f(c) {
-            return (buf, Some(c));
-        }
-
-        buf.push(c);
-    }
-
-    return (buf, None);
-}
+}*/

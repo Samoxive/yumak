@@ -1,233 +1,86 @@
-#[LALR]
-grammar(scale: i32);
+use std::iter::once;
 
-extern crate common;
+use crate::token::*;
+use crate::token::YumakToken;
 use common::bytecode::Inst;
-use token;
-use ast;
 
-//Credits: https://github.com/gluon-lang/gluon
+grammar<'input>(text: &'input str);
 
 extern {
-    enum Token<'input> {
-        "shebang line" => Token::ShebangLine(<&'input str>),
-        "identifier" => Token::Identifier(<&'input str>),
-        "operator" => Token::Operator(<&'input str>),
-        "string literal" => Token::StringLiteral(<String>),
-        "char literal" => Token::CharLiteral(<char>),
-        "int literal" => Token::IntLiteral(<i64>),
-        "byte literal" => Token::ByteLiteral(<u8>),
-        "float literal" => Token::FloatLiteral(<f64>),
-        "documentation comment" => Token::DocComment(<Comment>),
+    type Location = usize;
+    type Error    = crate::token::Error;
+    enum YumakToken<'input> {
+        "VAR"        => YumakToken::VAR(<&'input str>),
+        LET          => YumakToken::LET{..},
+        "NUMBER"     => YumakToken::NUMBER(<&'input str>),
+        "CONST"      => YumakToken::CONST(<&'input str>),
+        "COMMA"      => YumakToken::Comma{..},
+        "SEMI"       => YumakToken::Semi{..},
+        "TRUE"       => YumakToken::True{..},
+        "FALSE"      => YumakToken::False{..},
+        "PERIOD"     => YumakToken::Dot{..},
+        "LPAREN"     => YumakToken::Lparen{..},
+        "RPAREN"     => YumakToken::Rparen{..},
+        "LBRACKET"   => YumakToken::Lbracket{..},
+        "RBRACKET"   => YumakToken::Rbracket{..},
+        "STRING"     => YumakToken::STRING(<&'input str>),
 
-        "rec" => Token::Rec,
-        "else" => Token::Else,
-        "forall" => Token::Forall,
-        "if" => Token::If,
-        "in" => Token::In,
-        "let" => Token::Let,
-        "do" => Token::Do,
-        "match" => Token::Match,
-        "then" => Token::Then,
-        "type" => Token::Type,
-        "with" => Token::With,
-        "while" => Token::While,
-        "for" => Token::For
+        Plus => YumakToken::Plus,
+        Minus => YumakToken::Minus,
+        Star => YumakToken::Star,
+        Slash => YumakToken::Slash,
 
-        "@" => Token::At,
-        ":" => Token::Colon,
-        "," => Token::Comma,
-        "." => Token::Dot,
-        ".." => Token::DotDot,
-        "=" => Token::Equals,
-        "\\" => Token::Lambda,
-        "|" => Token::Pipe,
-        "->" => Token::RArrow,
-        "?" => Token::Question,
+        Eq => YumakToken::Eq,
+        EqEq => YumakToken::EqEq,
+        Ne => YumakToken::Ne,
+        
+        Gt => YumakToken::Gt,
+        Lt => YumakToken::Lt,
+        Ge => YumakToken::Ge,
+        Le => YumakToken::Le,
 
-        "{" => Token::LBrace,
-        "[" => Token::LBracket,
-        "(" => Token::LParen,
+        Semi => YumakToken::Semi,
+        Comma => YumakToken::Comma,
+        Colon => YumakToken::Colon,
+        Dot => YumakToken::Dot,
+        At => YumakToken::At,
+        ModSep => YumakToken::ModSep,
+        
+        Lparen => YumakToken::Lparen,
+        Rparen => YumakToken::Rparen,
+        Lbrace => YumakToken::Lbrace, 
+        Rbrace => YumakToken::Rbrace,
+        Lbracket => YumakToken::Lbracket,
+        Rbracket => YumakToken::Rbracket,
 
-        "}" => Token::RBrace,
-        "]" => Token::RBracket,
-        ")" => Token::RParen,
-
-        "#[" => Token::AttributeOpen,
-
-        "block open" => Token::OpenBlock,
-        "block close" => Token::CloseBlock,
-        "block separator" => Token::Semi,
-
-        Num => Token::Num(<i32>),
-        Fraction => Token::Fraction(<i32>, <i32>),
+        Var => YumakToken::Var,
+        Function => YumakToken::Function,
+        Return => YumakToken::Return,
+        For => YumakToken::For,
+        While => YumakToken::While,
+        If => YumakToken::If,
+        Else => YumakToken::Else,
+        True => YumakToken::True,
+        False => YumakToken::False,
     }
 }
 
-Expr: ast::Defs = {
-    <l:Expr> "-" <r:Factor> => l - r => ast::Defs::Sub,
-    <l:Expr> "+" <r:Factor> => l + r => ast::Defs::Add,
-
-    Factor,
+pub Toplevel: Vec<Inst> = {
+  ExprTop,
+  //Cmdtop
 };
 
-Factor: ast::Defs = {
-    <l:Factor> "*" <r:Term> => l * r => ast::Defs::Mul,
-    <l:Factor> "/" <r:Term> => l / r => ast::Defs::Div,
-    Term,
+ExprTop: Vec<Inst> = {
+  <Expr>                => vec![<>],
+  <e:Expr> <t:Toplevel> => { once(e).chain(t.into_iter()).collect() }
 };
 
-Term: i32 = {
-    <n:Num> => n * scale,
-    "(" <Expr> ")",
+Expr: Inst = {
+    Alloc,
 };
 
-// LET DEFINITIONS
-ValueBinding: ValueBinding<Id> = {
-    <metadata: Metadata?> <bind: PlainValueBinding> => {
-        let mut bind = bind;
-        bind.metadata = metadata.unwrap_or_default();
-        bind
-    }
-};
-
-PlainValueBinding: ValueBinding<Id> = {
-    "let" <name: Sp<AtomicPattern>> <typ: (":" <Type>)?> "=" <expr: SpExpr> => {
-        ValueBinding {
-            metadata: Metadata::default(),
-            name,
-            typ,
-            resolved_type: type_cache.hole(),
-            args: vec![],
-            expr,
-        }
-    },
-
-    "let" <name: Sp<Ident>> <args: ValueArgument+> <typ: (":" <Type>)?> "=" <expr: SpExpr> =>
-        ValueBinding {
-            metadata: Metadata::default(),
-            name: name.map(|name| new_ident(type_cache, name)).map(Pattern::Ident),
-            typ,
-            resolved_type: type_cache.hole(),
-            args,
-            expr,
-        },
-};
-
-// ATOMIC EXPRESSIONS
-AtomicExpr: Expr<Id> = {
-    <id: Ident> =>
-        Expr::Ident(new_ident(type_cache, id)),
-
-    <lit: Literal> =>
-        Expr::Literal(lit),
-
-    <expr: SpAtomicExpr> "." <id: Ident> =>
-        Expr::Projection(Box::new(expr), id, type_cache.hole()),
-
-    <expr: SpAtomicExpr> "." <err: !> => {
-        errors.push(err.error);
-        Expr::Projection(Box::new(expr), env.from_str(""), type_cache.hole())
-    },
-
-    "(" <elems: Comma<SpExpr>> ")" =>
-        Expr::Tuple { typ: type_cache.hole(), elems: elems },
-
-    "[" <elems: Comma<SpExpr>> "]" => Expr::Array(Array {
-            typ: type_cache.hole(),
-            exprs: elems,
-        }),
-
-    "{" <fields: Comma<FieldExpr>> <base: RecordExprBase> "}" => {
-        let mut types = Vec::new();
-        let mut values = Vec::new();
-
-        for field in fields {
-            match field {
-                FieldExpr::Type(metadata, id, typ) => types.push(ExprField {
-                    metadata,
-                    name: id,
-                    value: typ
-                }),
-                FieldExpr::Value(metadata, id, expr) => values.push(ExprField {
-                    metadata,
-                    name: id,
-                    value: expr
-                }),
-            }
-        }
-
-        Expr::Record {
-            typ: type_cache.hole(),
-            types: types,
-            exprs: values,
-            base: base.map(Box::new),
-        }
-    },
-};
-
-Expr: Expr<Id> = {
-    InfixExpr,
-
-    //changed if then else to if {} else {}
-    "if" <pred: SpExpr> "{" <if_true: SpExpr> "}" "else" "{" <if_false: SpExpr> "}" =>
-        Expr::IfElse(Box::new(pred), Box::new(if_true), Box::new(if_false)),
-
-    //we dont have / need match, recursive etc. yet, will delete
-    /*
-    "match" <body: SpExpr> "with" <arms: Alternative+> =>
-        Expr::Match(Box::new(body), arms),
-
-    <binding: ValueBinding> <body: InExpr> => {
-        Expr::LetBindings(ValueBindings::Plain(Box::new(binding)), Box::new(body))
-    },
-
-    <binding: TypeBinding> <body: InExpr> => {
-        Expr::TypeBindings(vec![binding], Box::new(body))
-    },
-
-    <metadata: Metadata?> "rec" <bindings: RecursiveValueBinding+> <body: InExpr> => {
-        let mut bindings = bindings;
-        if let Some(metadata) = metadata {
-            bindings[0].metadata = metadata;
-        }
-        Expr::LetBindings(ValueBindings::Recursive(bindings), Box::new(body))
-    },
-
-    <metadata: Metadata?> "rec" <bindings: TypeBinding+> <body: InExpr> => {
-        let mut bindings = bindings;
-        if let Some(metadata) = metadata {
-            bindings[0].metadata = metadata;
-        }
-        Expr::TypeBindings(bindings, Box::new(body))
-    },
-    */
-
-    "while" <cond: SpExpr> "{" <body: SpExpr> "}"
-
-    //todo: define elementInList
-    "for" <elemInList: any?!> "{" <body: SpExpr> "}"
-
-    //we don't have do as well, I comment out them instead of deleting until 
-    //I can implement our functions fully.
-    /*
-    "do" <id: SpannedIdent> "=" <bound: SpExpr> <body: InExpr> => {
-        Expr::Do(Do { id, bound: Box::new(bound), body: Box::new(body), flat_map_id: None })
-    },
-    */
-
-    BlockExpr,
-
-    ! => {
-        errors.push(<>.error);
-        Expr::Error(None)
-    }
-};
-
-SpExpr: SpannedExpr<Id> = {
-    <expr: Sp<Expr>> => super::shrink_hidden_spans(expr),
-};
-
-pub TopExpr: SpannedExpr<Id> = {
-    "shebang line"? <expr: SpExpr> SkipExtraTokens => expr,
+pub Alloc: Inst = {
+  LET <id: "STRING"> => Inst::Alloc{
+      name: id.to_string(),
+  }
 };

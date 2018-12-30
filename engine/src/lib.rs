@@ -2,6 +2,7 @@
 
 extern crate common;
 extern crate either;
+extern crate failure;
 
 use common::bytecode::Inst;
 use common::SyncMut;
@@ -10,9 +11,25 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
+use failure::Error;
 
 pub struct ExecutionEngine {
     tasks: VecDeque<SyncMut<ExecutionContext>>,
+}
+
+impl ExecutionEngine {
+    fn run(engine: SyncMut<ExecutionEngine>) -> Result<!, Error> {
+        loop {
+            let task_option = {
+                let engine_lock = engine.lock()?;
+                engine_lock.tasks.pop_front()
+            };
+
+            if let Some(task) = task_option {
+                task.lock()?.run(engine.clone(), task.clone());
+            }
+        }
+    }
 }
 
 pub struct NativeFunctionData {
@@ -70,12 +87,11 @@ fn search_value_from_context(
             .expect("Could not lock execution context!")
             .stack
             .get(name)
-            .map(|value| value.clone())
+            .cloned()
     };
 
-    match result {
-        Some(value_ref) => return Some((context, value_ref)),
-        _ => (),
+    if let Some(value_ref) = result {
+        return Some((context, value_ref));
     };
 
     let parent_context: Option<SyncMut<ExecutionContext>> = {
@@ -84,7 +100,7 @@ fn search_value_from_context(
             .expect("Could not lock execution context!")
             .parent_context
             .as_ref()
-            .map(|context| context.clone())
+            .cloned()
     };
 
     match parent_context {
@@ -143,12 +159,10 @@ impl ExecutionContext {
         name: &str,
     ) -> Option<Either<RcValue, (SyncMut<ExecutionContext>, RcValue)>> {
         let result = self.stack.get(name);
-        match result {
-            Some(value_ref) => return Some(Left(value_ref.clone())),
-            _ => (),
-        }
 
-        let parent_context = self.parent_context.as_ref().map(|parent| parent.clone());
+        if let Some(value_ref) = result { return Some(Left(value_ref.clone())); }
+
+        let parent_context = self.parent_context.as_ref().cloned();
         match parent_context {
             Some(parent) => search_value_from_context(parent, name).map(|val| Right(val)),
             None => None,

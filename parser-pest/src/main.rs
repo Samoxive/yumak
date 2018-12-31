@@ -2,7 +2,13 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 use std::fs;
+
+extern crate common;
+extern crate engine;
+
 use common::bytecode::Inst;
+use common::{new_syncmut, SyncMut};
+use engine::{ExecutionContext, ExecutionEngine};
 
 use pest::{Parser,
     //error::Error as PestError,
@@ -87,5 +93,9 @@ fn main() {
         }
     }
 
-    println!("{:?}",insts);
+    let mut engine: ExecutionEngine = ExecutionEngine::new();
+    let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
+    engine.push_task(main_context);
+    ExecutionEngine::run(new_syncmut(engine));
+    //println!("{:?}",insts);
 }

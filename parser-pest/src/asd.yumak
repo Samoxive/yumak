@@ -1,4 +1,5 @@
 let testing = 5;
 let mahmut;
 mahmut = 32.23;
-print(a);
+print(mahmut);
+print(testing);

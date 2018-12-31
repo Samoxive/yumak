@@ -11,3 +11,6 @@ lazy_static = "1.2.0"
 
 [dependencies.common]
 path = "../common"
+
+[dependencies.engine]
+path = "../engine"

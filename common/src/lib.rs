@@ -2,6 +2,10 @@ use std::sync::{Arc, Mutex};
 
 pub type SyncMut<T> = Arc<Mutex<T>>;
 
+pub fn new_syncmut<T>(t: T) -> SyncMut<T> {
+    Arc::new(Mutex::new(t))
+}
+
 pub mod bytecode {
     use std::sync::Arc;
     #[derive(PartialEq, Debug, Clone)]

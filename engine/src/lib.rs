@@ -5,7 +5,7 @@ extern crate either;
 extern crate failure;
 
 use common::bytecode::Inst;
-use common::SyncMut;
+use common::{new_syncmut, SyncMut};
 use either::*;
 use failure::{format_err, Error};
 use std::collections::HashMap;
@@ -159,7 +159,7 @@ pub struct ExecutionContext {
 }
 
 impl ExecutionContext {
-    pub fn from_instructions(instructions: Vec<Inst>) -> ExecutionContext {
+    pub fn from_instructions(instructions: Vec<Inst>) -> SyncMut<ExecutionContext> {
         let mut label_points: HashMap<String, usize> = HashMap::new();
         for (i, elem) in instructions.iter().enumerate() {
             if let Inst::GoTo { name } = elem {
@@ -177,13 +177,13 @@ impl ExecutionContext {
         stack.insert("print".into(), Value::NativeFunction(Arc::new(NativeFunctionData{ fun: Arc::new(print_val) })).into());
         stack.insert("exit".into(), Value::NativeFunction(Arc::new(NativeFunctionData{ fun: Arc::new(yumak_exit) })).into());
 
-        ExecutionContext {
+        new_syncmut(ExecutionContext {
             program_counter: 0,
             program,
             stack,
             parent_context: None,
             call_result: Value::Nothing.into(),
-        }
+        })
     }
 
     pub fn from_interpreted_function_call(

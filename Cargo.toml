@@ -11,3 +11,4 @@ path = "engine"
 path = "common"
 
 [dependencies]
+failure = "0.1.3"

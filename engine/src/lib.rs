@@ -12,15 +12,23 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
+use std::fmt::{Formatter, Debug};
+use std::process::exit;
 
-type ExecutionResult = Result<(), Error>;
+pub type ExecutionResult = Result<(), Error>;
 
 pub struct ExecutionEngine {
     tasks: VecDeque<SyncMut<ExecutionContext>>,
 }
 
 impl ExecutionEngine {
-    fn run(engine: SyncMut<ExecutionEngine>) -> Result<(), Error> {
+    pub fn new() -> ExecutionEngine {
+        ExecutionEngine {
+            tasks: VecDeque::new(),
+        }
+    }
+
+    pub fn run(engine: SyncMut<ExecutionEngine>) -> Result<(), Error> {
         loop {
             let task_option = {
                 let mut engine_lock = engine.lock().unwrap();
@@ -28,11 +36,15 @@ impl ExecutionEngine {
             };
 
             if let Some(task) = task_option {
-                task.lock().unwrap().run(engine.clone(), task.clone());
+                task.lock().unwrap().run(engine.clone(), task.clone())?;
             }
         }
 
         Ok(())
+    }
+
+    pub fn push_task(&mut self, task: SyncMut<ExecutionContext>) {
+        self.tasks.push_back(task);
     }
 }
 
@@ -40,7 +52,31 @@ pub struct NativeFunctionData {
     fun: Arc<Fn(Option<RcValue>, Vec<RcValue>) -> RcValue>,
 }
 
-#[derive(Clone)]
+impl Debug for NativeFunctionData {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "NativeFunction {{ fun }}")
+    }
+}
+
+fn print_val(_this: Option<RcValue>, arguments: Vec<RcValue>) -> RcValue {
+    arguments
+        .iter().for_each(|argument| println!("{:?}", argument));
+    Value::Nothing.into()
+}
+
+fn yumak_exit(_this: Option<RcValue>, arguments: Vec<RcValue>) -> RcValue {
+    if arguments.is_empty() {
+        exit(0);
+    } else {
+        if let Value::Integer(i) = *arguments[0] {
+            exit(i as i32);
+        } else {
+            exit(0);
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct InterpretedFunctionData {
     argument_names: Arc<Vec<String>>,
     label_points: Arc<HashMap<String, usize>>,
@@ -48,7 +84,7 @@ pub struct InterpretedFunctionData {
 }
 
 impl InterpretedFunctionData {
-    fn from_argument_and_instructions(
+    pub fn from_argument_and_instructions(
         argument_names: Arc<Vec<String>>,
         instructions: Arc<Vec<Inst>>,
     ) -> Self {
@@ -67,6 +103,7 @@ impl InterpretedFunctionData {
     }
 }
 
+#[derive(Debug)]
 pub enum Value {
     Boolean(bool),
     Integer(i64),
@@ -122,7 +159,7 @@ pub struct ExecutionContext {
 }
 
 impl ExecutionContext {
-    fn from_instructions(instructions: Vec<Inst>) -> ExecutionContext {
+    pub fn from_instructions(instructions: Vec<Inst>) -> ExecutionContext {
         let mut label_points: HashMap<String, usize> = HashMap::new();
         for (i, elem) in instructions.iter().enumerate() {
             if let Inst::GoTo { name } = elem {
@@ -136,16 +173,20 @@ impl ExecutionContext {
             instructions: Arc::new(instructions),
         };
 
+        let mut stack: HashMap<String, RcValue> = HashMap::new();
+        stack.insert("print".into(), Value::NativeFunction(Arc::new(NativeFunctionData{ fun: Arc::new(print_val) })).into());
+        stack.insert("exit".into(), Value::NativeFunction(Arc::new(NativeFunctionData{ fun: Arc::new(yumak_exit) })).into());
+
         ExecutionContext {
             program_counter: 0,
             program,
-            stack: HashMap::new(),
+            stack,
             parent_context: None,
             call_result: Value::Nothing.into(),
         }
     }
 
-    fn from_interpreted_function_call(
+    pub fn from_interpreted_function_call(
         interpreted_function: InterpretedFunctionData,
         parent_context: Option<SyncMut<ExecutionContext>>,
     ) -> ExecutionContext {
@@ -202,56 +243,80 @@ impl ExecutionContext {
         self.stack.insert(name, value);
     }
 
-    fn run(
+    pub fn run(
         &mut self,
         engine: SyncMut<ExecutionEngine>,
         this_context: SyncMut<ExecutionContext>,
     ) -> ExecutionResult {
-        let current_instruction: Inst = self
-            .program
-            .instructions
-            .get(self.program_counter)
-            .expect("Invalid PC!")
-            .clone();
-
-        match current_instruction {
-            Inst::Alloc { name } => self.handle_alloc(name),
-            Inst::PushInt { name, value } => self.handle_push_int(name, value)?,
-            Inst::PushFloat { name, value } => self.handle_push_float(name, value)?,
-            Inst::PushBoolean { name, value } => self.handle_push_boolean(name, value)?,
-            Inst::PushFunction {
-                name,
-                argument_names,
-                instructions,
-            } => self.handle_push_function(name, argument_names, instructions)?,
-            Inst::PushList { name } => self.handle_push_list(name)?,
-            Inst::PushObject { name } => self.handle_push_object(name)?,
-            Inst::PopObjectValue {
-                pop_to_name,
-                object_name,
-                key_name,
-            } => self.handle_pop_object_value(pop_to_name, object_name, key_name)?,
-            Inst::PushObjectValue {
-                object_name,
-                key_name,
-                value_name,
-            } => self.handle_push_object_value(object_name, key_name, value_name)?,
-            Inst::Call {
-                name,
-                arguments,
-                this,
-            } => {
-                self.handle_call(engine.clone(), this_context, name, arguments, this)?;
+        loop {
+            if self.program_counter >= self.program.instructions.len() {
+                self.ret(engine, None)?;
+                return Ok(());
             }
-            Inst::PushCallResult { name } => self.handle_push_call_result(name)?,
-            Inst::Label { name } => self.handle_label(name),
-            Inst::GoTo { name } => self.handle_goto(name)?,
-            Inst::Branch {
-                name,
-                true_label,
-                false_label,
-            } => self.handle_branch(name, true_label, false_label)?,
-            Inst::Return { name } => self.handle_return(engine.clone(), name)?,
+
+            let current_instruction: Inst = self
+                .program
+                .instructions
+                .get(self.program_counter)
+                .expect("Invalid PC!")
+                .clone();
+
+            match current_instruction {
+                Inst::Alloc { name } => self.handle_alloc(name),
+                Inst::PushInt { name, value } => self.handle_push_int(name, value)?,
+                Inst::PushFloat { name, value } => self.handle_push_float(name, value)?,
+                Inst::PushBoolean { name, value } => self.handle_push_boolean(name, value)?,
+                Inst::PushFunction {
+                    name,
+                    argument_names,
+                    instructions,
+                } => self.handle_push_function(name, argument_names, instructions)?,
+                Inst::PushList { name } => self.handle_push_list(name)?,
+                Inst::PushObject { name } => self.handle_push_object(name)?,
+                Inst::PopObjectValue {
+                    pop_to_name,
+                    object_name,
+                    key_name,
+                } => self.handle_pop_object_value(pop_to_name, object_name, key_name)?,
+                Inst::PushObjectValue {
+                    object_name,
+                    key_name,
+                    value_name,
+                } => self.handle_push_object_value(object_name, key_name, value_name)?,
+                Inst::Call {
+                    name,
+                    arguments,
+                    this,
+                } => {
+                    let should_continue =
+                        self.handle_call(engine.clone(), this_context.clone(), name, arguments, this)?;
+                    if should_continue {
+                        continue;
+                    } else {
+                        return Ok(());
+                    }
+                }
+                Inst::PushCallResult { name } => self.handle_push_call_result(name)?,
+                Inst::Label { name } => self.handle_label(name),
+                Inst::GoTo { name } => {
+                    self.handle_goto(name)?;
+                    continue;
+                }
+                Inst::Branch {
+                    name,
+                    true_label,
+                    false_label,
+                } => {
+                    self.handle_branch(name, true_label, false_label)?;
+                    continue;
+                }
+                Inst::Return { name } => {
+                    self.handle_return(engine.clone(), name)?;
+                    return Ok(());
+                }
+            }
+
+            self.program_counter += 1
         }
 
         Ok(())

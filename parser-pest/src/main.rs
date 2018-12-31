@@ -56,7 +56,7 @@ fn main() {
                         });
                         var_name = result.to_string();
                         },
-                    Rule::assignment => {
+                    Rule::variable => {
                         let mut inner_rules = variable.into_inner(); // { name ~ "=" ~ value }
                         var_name = inner_rules.next().unwrap().as_str().to_string();
                         },
@@ -79,7 +79,7 @@ fn main() {
                             value: result
                         });
                     }
-                    _ => {println!("{:?}",args)}
+                    _ => unreachable!()
                 }
             }
             Rule::EOI => (),

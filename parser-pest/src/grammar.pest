@@ -6,9 +6,10 @@ string_non_null = { char+ }
 number = _{float | integer}
 float = {("-"|"+")? ~ ASCII_DIGIT* ~ (".") ~ ASCII_DIGIT*}
 integer = {
-    //("-"|"+")? ~ 
+    ("-"|"+")? ~ 
     ASCII_DIGIT*}
 
+// TODO: add calls
 add      = { "+" }
 subtract = { "-" }
 multiply = { "*" }
@@ -18,17 +19,23 @@ operation = _{ add | subtract | multiply | divide }
 expr = { term ~ (operation ~ term)* }
 term = _{ "(" ~ expr ~ ")" | number }
 
-// ADD allocated variable to expr as term and make calculations.
-
 semicol = _{";"}
 equal = _{"="}
 
 let_allocate = {"let" ~ string_non_null}
 variable = {string_non_null}
 assignment = {(let_allocate | variable) ~ equal ~ number}
-//for now it is number, make it term later
+//for now it is number, make it term later for string, bool etc.
 
 function_call = {string_non_null ~ "(" ~ string_non_null ~ ")"}
+
+//TODO if stmt, while, (for iterated maybe)
+condition = {string_non_null}
+//TODO add if else if else if else
+if_stmt = {"if" ~ "("? ~ condition ~ ")"? ~ "{" ~ values* ~ "}" ~ "else"? ~ "{" ~ values* ~ "}" }
+while_stmt = {"while" ~ "("? ~ condition ~ ")"? ~ "{" ~ values* ~ "}"}
+
+//TODO add arrays etc. (list, object)
 
 file = {
     SOI ~

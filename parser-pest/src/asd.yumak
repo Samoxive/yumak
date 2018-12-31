@@ -1,2 +1,3 @@
-let testing
-let mahmut
+let testing = 5;
+let mahmut;
+print(a);

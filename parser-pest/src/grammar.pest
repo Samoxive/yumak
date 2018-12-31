@@ -1,14 +1,39 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
 char = { ASCII_ALPHANUMERIC | "." | "_" | "/" }
-name = @{ char+ }
-value = @{ char* }
-number = { (ASCII_DIGIT | "." | "-")+ }
-section = { "[" ~ name ~ "]" }
-property = { name ~ "=" ~ value }
-letalloc = {"let" ~ name}
+string_non_null = { char+ }
+
+number = _{float | integer}
+float = {("-"|"+")? ~ ASCII_DIGIT* ~ (".") ~ ASCII_DIGIT*}
+integer = {
+    //("-"|"+")? ~ 
+    ASCII_DIGIT*}
+
+add      = { "+" }
+subtract = { "-" }
+multiply = { "*" }
+divide   = { "/" }
+operation = _{ add | subtract | multiply | divide }
+
+expr = { term ~ (operation ~ term)* }
+term = _{ "(" ~ expr ~ ")" | number }
+
+// ADD allocated variable to expr as term and make calculations.
+
+semicol = _{";"}
+equal = _{"="}
+
+let_allocate = {"let" ~ string_non_null}
+variable = {string_non_null}
+assignment = {(let_allocate | variable) ~ equal ~ number}
+//for now it is number, make it term later
+
+function_call = {string_non_null ~ "(" ~ string_non_null ~ ")"}
+
 file = {
     SOI ~
-    ((section | property | letalloc)? ~ NEWLINE)* ~
+    values* ~
     EOI
 }
 
-WHITESPACE = _{ " " }
+values = _{( assignment | let_allocate | function_call) ~ semicol}

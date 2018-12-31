@@ -1,0 +1,12 @@
+[package]
+name = "parser-pest"
+version = "0.1.0"
+authors = ["Ozan Karaali <ozan.karaali@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+pest = "2.1.0"
+pest_derive = "2.1.0"
+
+[dependencies.common]
+path = "../common"

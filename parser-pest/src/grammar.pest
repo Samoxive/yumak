@@ -1,0 +1,14 @@
+char = { ASCII_ALPHANUMERIC | "." | "_" | "/" }
+name = @{ char+ }
+value = @{ char* }
+number = { (ASCII_DIGIT | "." | "-")+ }
+section = { "[" ~ name ~ "]" }
+property = { name ~ "=" ~ value }
+letalloc = {"let" ~ name}
+file = {
+    SOI ~
+    ((section | property | letalloc)? ~ NEWLINE)* ~
+    EOI
+}
+
+WHITESPACE = _{ " " }

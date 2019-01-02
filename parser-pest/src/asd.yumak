@@ -1,2 +1,5 @@
-let testing
-let mahmut
+let testing = -5;
+let mahmut;
+mahmut = 32.23;
+print(mahmut);
+print(testing);

@@ -10,25 +10,20 @@ use either::*;
 use failure::{format_err, Error};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::fmt::{Debug, Formatter};
 use std::mem::replace;
-use std::sync::{Arc, Mutex};
-use std::fmt::{Formatter, Debug};
 use std::process::exit;
+use std::sync::{Arc, Mutex};
 
 pub type ExecutionResult = Result<(), Error>;
 
+#[derive(Default)]
 pub struct ExecutionEngine {
     tasks: VecDeque<SyncMut<ExecutionContext>>,
 }
 
 impl ExecutionEngine {
-    pub fn new() -> ExecutionEngine {
-        ExecutionEngine {
-            tasks: VecDeque::new(),
-        }
-    }
-
-    pub fn run(engine: SyncMut<ExecutionEngine>) -> Result<(), Error> {
+    pub fn run(engine: &SyncMut<ExecutionEngine>) -> Result<(), Error> {
         loop {
             let task_option = {
                 let mut engine_lock = engine.lock().unwrap();
@@ -36,7 +31,7 @@ impl ExecutionEngine {
             };
 
             if let Some(task) = task_option {
-                task.lock().unwrap().run(engine.clone(), task.clone())?;
+                task.lock().unwrap().run(engine, &task)?;
             }
         }
 
@@ -60,19 +55,18 @@ impl Debug for NativeFunctionData {
 
 fn print_val(_this: Option<RcValue>, arguments: Vec<RcValue>) -> RcValue {
     arguments
-        .iter().for_each(|argument| println!("{:?}", argument));
+        .iter()
+        .for_each(|argument| println!("{:?}", argument));
     Value::Nothing.into()
 }
 
 fn yumak_exit(_this: Option<RcValue>, arguments: Vec<RcValue>) -> RcValue {
     if arguments.is_empty() {
         exit(0);
+    } else if let Value::Integer(i) = *arguments[0] {
+        exit(i as i32);
     } else {
-        if let Value::Integer(i) = *arguments[0] {
-            exit(i as i32);
-        } else {
-            exit(0);
-        }
+        exit(0);
     }
 }
 
@@ -174,8 +168,20 @@ impl ExecutionContext {
         };
 
         let mut stack: HashMap<String, RcValue> = HashMap::new();
-        stack.insert("print".into(), Value::NativeFunction(Arc::new(NativeFunctionData{ fun: Arc::new(print_val) })).into());
-        stack.insert("exit".into(), Value::NativeFunction(Arc::new(NativeFunctionData{ fun: Arc::new(yumak_exit) })).into());
+        stack.insert(
+            "print".into(),
+            Value::NativeFunction(Arc::new(NativeFunctionData {
+                fun: Arc::new(print_val),
+            }))
+            .into(),
+        );
+        stack.insert(
+            "exit".into(),
+            Value::NativeFunction(Arc::new(NativeFunctionData {
+                fun: Arc::new(yumak_exit),
+            }))
+            .into(),
+        );
 
         new_syncmut(ExecutionContext {
             program_counter: 0,
@@ -245,12 +251,12 @@ impl ExecutionContext {
 
     pub fn run(
         &mut self,
-        engine: SyncMut<ExecutionEngine>,
-        this_context: SyncMut<ExecutionContext>,
+        engine: &SyncMut<ExecutionEngine>,
+        this_context: &SyncMut<ExecutionContext>,
     ) -> ExecutionResult {
         loop {
             if self.program_counter >= self.program.instructions.len() {
-                self.ret(engine, None)?;
+                self.ret(&engine, None)?;
                 return Ok(());
             }
 
@@ -277,19 +283,19 @@ impl ExecutionContext {
                     pop_to_name,
                     object_name,
                     key_name,
-                } => self.handle_pop_object_value(pop_to_name, object_name, key_name)?,
+                } => self.handle_pop_object_value(&pop_to_name, &object_name, &key_name)?,
                 Inst::PushObjectValue {
                     object_name,
                     key_name,
                     value_name,
-                } => self.handle_push_object_value(object_name, key_name, value_name)?,
+                } => self.handle_push_object_value(&object_name, &key_name, &value_name)?,
                 Inst::Call {
                     name,
                     arguments,
                     this,
                 } => {
                     let should_continue =
-                        self.handle_call(engine.clone(), this_context.clone(), name, arguments, this)?;
+                        self.handle_call(&engine, this_context.clone(), &name, &arguments, this)?;
                     if should_continue {
                         continue;
                     } else {
@@ -297,9 +303,9 @@ impl ExecutionContext {
                     }
                 }
                 Inst::PushCallResult { name } => self.handle_push_call_result(name)?,
-                Inst::Label { name } => self.handle_label(name),
+                Inst::Label { name } => self.handle_label(&name),
                 Inst::GoTo { name } => {
-                    self.handle_goto(name)?;
+                    self.handle_goto(&name)?;
                     continue;
                 }
                 Inst::Branch {
@@ -307,11 +313,11 @@ impl ExecutionContext {
                     true_label,
                     false_label,
                 } => {
-                    self.handle_branch(name, true_label, false_label)?;
+                    self.handle_branch(&name, true_label, false_label)?;
                     continue;
                 }
                 Inst::Return { name } => {
-                    self.handle_return(engine.clone(), name)?;
+                    self.handle_return(&engine, &name)?;
                     return Ok(());
                 }
             }
@@ -364,30 +370,30 @@ impl ExecutionContext {
 
     fn handle_pop_object_value(
         &mut self,
-        pop_to_name: String,
-        object_name: String,
-        key_name: String,
+        pop_to_name: &str,
+        object_name: &str,
+        key_name: &str,
     ) -> ExecutionResult {
         let object_value = self.get_value(&object_name)?;
 
         let popped_value = if let Value::Object(ref map) = *object_value {
             let map_lock = map.lock().unwrap();
             map_lock
-                .get(&key_name)
+                .get(key_name)
                 .cloned()
                 .unwrap_or_else(|| Value::Nothing.into())
         } else {
             unimplemented!("Handle methods of non-object values!");
         };
 
-        self.set_value(pop_to_name, popped_value)
+        self.set_value(pop_to_name.to_string(), popped_value)
     }
 
     fn handle_push_object_value(
         &mut self,
-        object_name: String,
-        key_name: String,
-        value_name: String,
+        object_name: &str,
+        key_name: &str,
+        value_name: &str,
     ) -> ExecutionResult {
         let object_value = self.get_value(&object_name)?;
 
@@ -395,7 +401,7 @@ impl ExecutionContext {
 
         if let Value::Object(ref map) = *object_value {
             let mut map_lock = map.lock().unwrap();
-            map_lock.insert(key_name, target_value);
+            map_lock.insert(key_name.to_string(), target_value);
             Ok(())
         } else {
             Err(format_err!("Selected object is no object at all!"))
@@ -404,10 +410,10 @@ impl ExecutionContext {
 
     fn handle_call(
         &mut self,
-        engine: SyncMut<ExecutionEngine>,
+        engine: &SyncMut<ExecutionEngine>,
         this_context: SyncMut<ExecutionContext>,
-        name: String,
-        arguments: Arc<Vec<String>>,
+        name: &str,
+        arguments: &Arc<Vec<String>>,
         this: Option<String>,
     ) -> Result<bool, Error> {
         let call_value = self.get_value(&name)?;
@@ -466,12 +472,12 @@ impl ExecutionContext {
         self.set_value(name, call_result)
     }
 
-    fn handle_label(&mut self, _name: String) {
+    fn handle_label(&mut self, _name: &str) {
         // nada
     }
 
-    fn handle_goto(&mut self, name: String) -> ExecutionResult {
-        let pc_option = self.program.label_points.get(&name);
+    fn handle_goto(&mut self, name: &str) -> ExecutionResult {
+        let pc_option = self.program.label_points.get(name);
         if let Some(pc) = pc_option {
             self.program_counter = *pc;
             Ok(())
@@ -482,7 +488,7 @@ impl ExecutionContext {
 
     fn handle_branch(
         &mut self,
-        name: String,
+        name: &str,
         true_label: Option<String>,
         false_label: Option<String>,
     ) -> ExecutionResult {
@@ -499,12 +505,12 @@ impl ExecutionContext {
 
         if bool_value {
             match true_label {
-                Some(label) => self.handle_goto(label)?,
+                Some(label) => self.handle_goto(&label)?,
                 None => self.program_counter += 1,
             }
         } else {
             match false_label {
-                Some(label) => self.handle_goto(label)?,
+                Some(label) => self.handle_goto(&label)?,
                 None => self.program_counter += 1,
             }
         }
@@ -514,7 +520,7 @@ impl ExecutionContext {
 
     fn ret(
         &mut self,
-        engine: SyncMut<ExecutionEngine>,
+        engine: &SyncMut<ExecutionEngine>,
         return_value_option: Option<RcValue>,
     ) -> ExecutionResult {
         let mut engine_lock = engine.lock().unwrap();
@@ -532,8 +538,8 @@ impl ExecutionContext {
         Ok(())
     }
 
-    fn handle_return(&mut self, engine: SyncMut<ExecutionEngine>, name: String) -> ExecutionResult {
-        let return_value = self.get_value(&name)?;
+    fn handle_return(&mut self, engine: &SyncMut<ExecutionEngine>, name: &str) -> ExecutionResult {
+        let return_value = self.get_value(name)?;
         self.ret(engine, return_value.into())
     }
 }

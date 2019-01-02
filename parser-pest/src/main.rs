@@ -32,10 +32,11 @@ lazy_static! {
 }
 
 
-fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> i32 {
+fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> vec![] {
+    let mut insts: Vec<Inst> = vec![];
     let primary = |pair| consume(pair, climber);
     let infix = |lhs: i32, op: Pair<Rule>, rhs: i32| match op.as_rule() {
-        Rule::add => lhs + rhs,
+        Rule::add      => lhs + rhs,
         Rule::subtract => lhs - rhs,
         Rule::multiply => lhs * rhs,
         Rule::divide   => lhs / rhs,
@@ -47,11 +48,23 @@ fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> i32 {
     //println!("{:?}",pair);
     match pair.as_rule() {
         Rule::expr => climber.climb(pair.into_inner(), primary, infix),
-        //Rule::number => pair.as_rule()//as_str().parse::<i32>().unwrap(),
-        Rule::integer => pair.as_str().parse::<i32>().unwrap(),
-        Rule::float => pair.as_str().parse::<i32>().unwrap(),
+        Rule::integer => {
+            let result = args.as_str().parse::<i64>().unwrap();
+            insts.push(Inst::PushInt{
+                name: var_name,
+                value: result
+            });
+        },
+        Rule::float => {
+            let result = args.as_str().parse::<f64>().unwrap();
+            insts.push(Inst::PushFloat{
+                name: var_name,
+                value: result
+            });
+        },
         _ => 0,
     }
+    return insts;
 }
 
 
@@ -66,7 +79,7 @@ fn main() {
     for line in file.into_inner() {
         match line.as_rule() {
             Rule::let_allocate => {
-                let mut inner_rules = line.into_inner(); // { name ~ "=" ~ value }
+                let mut inner_rules = line.into_inner();
 
                 let result: &str = inner_rules.next().unwrap().as_str();
                 insts.push(Inst::Alloc{
@@ -74,7 +87,7 @@ fn main() {
                 })
             }
             Rule::function_call=>{
-                let mut inner_rules = line.into_inner(); // { name ~ "=" ~ value }
+                let mut inner_rules = line.into_inner();
 
                 let func: &str = inner_rules.next().unwrap().as_str();
                 let args: &str = inner_rules.next().unwrap().as_str();
@@ -85,12 +98,12 @@ fn main() {
                 })
             }
             Rule::assignment=>{
-                let mut inner_rules = line.into_inner(); // { name ~ "=" ~ value }
+                let mut inner_rules = line.into_inner();
                 let variable = inner_rules.next().unwrap();
                 let mut var_name;
                 match variable.as_rule() {
                     Rule::let_allocate => {
-                        let mut inner_rules = variable.into_inner(); // { name ~ "=" ~ value }
+                        let mut inner_rules = variable.into_inner();
                         let result: &str = inner_rules.next().unwrap().as_str();
                         insts.push(Inst::Alloc{
                             name: result.to_string()
@@ -98,7 +111,7 @@ fn main() {
                         var_name = result.to_string();
                         },
                     Rule::variable => {
-                        let mut inner_rules = variable.into_inner(); // { name ~ "=" ~ value }
+                        let mut inner_rules = variable.into_inner();
                         var_name = inner_rules.next().unwrap().as_str().to_string();
                         },
                     _ => unreachable!()
@@ -112,14 +125,14 @@ fn main() {
                         println!("{:?}",consume(args, &PREC_CLIMBER));
                     }
                     Rule::integer => {
-                        let result = args.as_str().parse::<i64>().unwrap(); // { name ~ "=" ~ value }
+                        let result = args.as_str().parse::<i64>().unwrap();
                         insts.push(Inst::PushInt{
                             name: var_name,
                             value: result
                         });
                         },
                     Rule::float => {
-                        let result = args.as_str().parse::<f64>().unwrap(); // { name ~ "=" ~ value }
+                        let result = args.as_str().parse::<f64>().unwrap();
                         insts.push(Inst::PushFloat{
                             name: var_name,
                             value: result

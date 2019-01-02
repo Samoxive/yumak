@@ -1,5 +1,6 @@
 let testing = -5;
 let mahmut;
-mahmut = 32.23;
+mahmut = 32 + 35;
 print(mahmut);
 print(testing);
+exit(testing);

@@ -14,7 +14,9 @@ add      = { "+" }
 subtract = { "-" }
 multiply = { "*" }
 divide   = { "/" }
-operation = _{ add | subtract | multiply | divide }
+power    = { "^" }
+modulus  = { "%" }
+operation = _{ add | subtract | multiply | divide | modulus | power }
 
 expr = { term ~ (operation ~ term)* }
 term = _{ "(" ~ expr ~ ")" | number }
@@ -24,7 +26,7 @@ equal = _{"="}
 
 let_allocate = {"let" ~ string_non_null}
 variable = {string_non_null}
-assignment = {(let_allocate | variable) ~ equal ~ number}
+assignment = {(let_allocate | variable) ~ equal ~ expr}
 //for now it is number, make it term later for string, bool etc.
 
 function_call = {string_non_null ~ "(" ~ string_non_null ~ ")"}

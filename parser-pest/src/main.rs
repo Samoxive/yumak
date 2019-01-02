@@ -32,35 +32,203 @@ lazy_static! {
 }
 
 
-fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> vec![] {
+fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> Vec<common::bytecode::Inst> {
     let mut insts: Vec<Inst> = vec![];
     let primary = |pair| consume(pair, climber);
-    let infix = |lhs: i32, op: Pair<Rule>, rhs: i32| match op.as_rule() {
-        Rule::add      => lhs + rhs,
-        Rule::subtract => lhs - rhs,
-        Rule::multiply => lhs * rhs,
-        Rule::divide   => lhs / rhs,
-        Rule::modulus  => lhs % rhs,
+    let infix = |lhs: f64, op: Pair<Rule>, rhs: f64| match op.as_rule() {
+        Rule::add => {
+            insts.push(Inst::Alloc{
+                name: "lhs".to_string()
+            });
+            insts.push(Inst::Alloc{
+                name: "rhs".to_string()
+            });
+            insts.push(Inst::PushFloat{
+                name: "lhs".to_string(),
+                value: lhs
+            });
+            insts.push(Inst::PushFloat{
+                name: "rhs".to_string(),
+                value: rhs
+            });
+            insts.push(Inst::Alloc{
+                name: "lhs#add".to_string()
+            });
+            insts.push(Inst::PopObjectValue{
+                pop_to_name: "lhs#add".to_string(),
+                object_name: "lhs".to_string(),
+                key_name: "add".to_string(),
+            });
+            insts.push(Inst::Call{
+                name: "lhs#add".to_string(),
+                arguments: vec!["rhs"].into(),
+                this: "lhs".to_string(),
+            });
+        },
+        Rule::subtract => {
+            insts.push(Inst::Alloc{
+                name: "lhs".to_string()
+            });
+            insts.push(Inst::Alloc{
+                name: "rhs".to_string()
+            });
+            insts.push(Inst::PushFloat{
+                name: "lhs".to_string(),
+                value: lhs
+            });
+            insts.push(Inst::PushFloat{
+                name: "rhs".to_string(),
+                value: rhs
+            });
+            insts.push(Inst::Alloc{
+                name: "lhs#sub".to_string()
+            });
+            insts.push(Inst::PopObjectValue{
+                pop_to_name: "lhs#sub".to_string(),
+                object_name: "lhs".to_string(),
+                key_name: "sub".to_string(),
+            });
+            insts.push(Inst::Call{
+                name: "lhs#sub".to_string(),
+                arguments: vec!["rhs"].into(),
+                this: "lhs".to_string(),
+            });
+        },
+        Rule::multiply => {
+            insts.push(Inst::Alloc{
+                name: "lhs".to_string()
+            });
+            insts.push(Inst::Alloc{
+                name: "rhs".to_string()
+            });
+            insts.push(Inst::PushFloat{
+                name: "lhs".to_string(),
+                value: lhs
+            });
+            insts.push(Inst::PushFloat{
+                name: "rhs".to_string(),
+                value: rhs
+            });
+            insts.push(Inst::Alloc{
+                name: "lhs#mul".to_string()
+            });
+            insts.push(Inst::PopObjectValue{
+                pop_to_name: "lhs#mul".to_string(),
+                object_name: "lhs".to_string(),
+                key_name: "mul".to_string(),
+            });
+            insts.push(Inst::Call{
+                name: "lhs#mul".to_string(),
+                arguments: vec!["rhs"].into(),
+                this: "lhs".to_string(),
+            });
+        },
+        Rule::divide => {
+            insts.push(Inst::Alloc{
+                name: "lhs".to_string()
+            });
+            insts.push(Inst::Alloc{
+                name: "rhs".to_string()
+            });
+            insts.push(Inst::PushFloat{
+                name: "lhs".to_string(),
+                value: lhs
+            });
+            insts.push(Inst::PushFloat{
+                name: "rhs".to_string(),
+                value: rhs
+            });
+            insts.push(Inst::Alloc{
+                name: "lhs#div".to_string()
+            });
+            insts.push(Inst::PopObjectValue{
+                pop_to_name: "lhs#div".to_string(),
+                object_name: "lhs".to_string(),
+                key_name: "div".to_string(),
+            });
+            insts.push(Inst::Call{
+                name: "lhs#div".to_string(),
+                arguments: vec!["rhs"].into(),
+                this: "lhs".to_string(),
+            });
+        },
+        Rule::modulus => {
+            insts.push(Inst::Alloc{
+                name: "lhs".to_string()
+            });
+            insts.push(Inst::Alloc{
+                name: "rhs".to_string()
+            });
+            insts.push(Inst::PushFloat{
+                name: "lhs".to_string(),
+                value: lhs
+            });
+            insts.push(Inst::PushFloat{
+                name: "rhs".to_string(),
+                value: rhs
+            });
+            insts.push(Inst::Alloc{
+                name: "lhs#mod".to_string()
+            });
+            insts.push(Inst::PopObjectValue{
+                pop_to_name: "lhs#mod".to_string(),
+                object_name: "lhs".to_string(),
+                key_name: "mod".to_string(),
+            });
+            insts.push(Inst::Call{
+                name: "lhs#mod".to_string(),
+                arguments: vec!["rhs"].into(),
+                this: "lhs".to_string(),
+            });
+        },
             //Rule::power    => lhs.powf(rhs),
-        Rule::power => lhs.pow(rhs as u32),
+        Rule::power => {
+            insts.push(Inst::Alloc{
+                name: "lhs".to_string()
+            });
+            insts.push(Inst::Alloc{
+                name: "rhs".to_string()
+            });
+            insts.push(Inst::PushFloat{
+                name: "lhs".to_string(),
+                value: lhs
+            });
+            insts.push(Inst::PushFloat{
+                name: "rhs".to_string(),
+                value: rhs
+            });
+            insts.push(Inst::Alloc{
+                name: "lhs#pow".to_string()
+            });
+            insts.push(Inst::PopObjectValue{
+                pop_to_name: "lhs#pow".to_string(),
+                object_name: "lhs".to_string(),
+                key_name: "pow".to_string(),
+            });
+            insts.push(Inst::Call{
+                name: "lhs#pow".to_string(),
+                arguments: vec!["rhs"].into(),
+                this: "lhs".to_string(),
+            });
+        },
         _ => unreachable!(),
     };
     //println!("{:?}",pair);
     match pair.as_rule() {
         Rule::expr => climber.climb(pair.into_inner(), primary, infix),
         Rule::integer => {
-            let result = args.as_str().parse::<i64>().unwrap();
+            /*let result = args.as_str().parse::<i64>().unwrap();
             insts.push(Inst::PushInt{
                 name: var_name,
                 value: result
-            });
+            });*/
         },
         Rule::float => {
-            let result = args.as_str().parse::<f64>().unwrap();
+            /*let result = args.as_str().parse::<f64>().unwrap();
             insts.push(Inst::PushFloat{
                 name: var_name,
                 value: result
-            });
+            });*/
         },
         _ => 0,
     }
@@ -122,7 +290,11 @@ fn main() {
                 match args.as_rule() {
                     Rule::expr => {
                         //let expr = args.inner_rules().next().unwrap();
-                        println!("{:?}",consume(args, &PREC_CLIMBER));
+                        insts.append(&mut consume(args, &PREC_CLIMBER));
+                        //println!("{:?}",consume(args, &PREC_CLIMBER));
+                        insts.push(Inst::PushCallResult{
+                            name: var_name,
+                        });
                     }
                     Rule::integer => {
                         let result = args.as_str().parse::<i64>().unwrap();

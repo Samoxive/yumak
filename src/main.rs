@@ -9,7 +9,7 @@ use failure::Error;
 use std::sync::{Arc, Mutex};
 
 fn main() -> Result<(), Error> {
-    let mut engine: ExecutionEngine = ExecutionEngine::new();
+    let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(vec![
         Inst::Alloc { name: "x".into() },
         Inst::Alloc { name: "y".into() },
@@ -69,5 +69,5 @@ fn main() -> Result<(), Error> {
         Inst::Return { name: "x".into() },
     ]);
     engine.push_task(main_context);
-    ExecutionEngine::run(new_syncmut(engine))
+    ExecutionEngine::run(&new_syncmut(engine))
 }

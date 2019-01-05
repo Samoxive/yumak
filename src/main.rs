@@ -6,7 +6,6 @@ use common::bytecode::Inst;
 use common::{new_syncmut, SyncMut};
 use engine::{ExecutionContext, ExecutionEngine};
 use failure::Error;
-use std::sync::{Arc, Mutex};
 
 fn main() -> Result<(), Error> {
     let mut engine: ExecutionEngine = Default::default();
@@ -39,7 +38,7 @@ fn main() -> Result<(), Error> {
         Inst::Call {
             name: "y".into(),
             arguments: vec!["x".into()].into(),
-            this: None
+            this: None,
         },
         Inst::PushCallResult { name: "z".into() },
         Inst::Call {

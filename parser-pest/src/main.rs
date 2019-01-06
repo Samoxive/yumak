@@ -61,8 +61,8 @@ fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> Vec<common:
             });
             insts.push(Inst::Call{
                 name: "lhs#add".to_string(),
-                arguments: vec!["rhs"].into(),
-                this: "lhs".to_string(),
+                arguments: vec!["rhs".into()].into(),
+                this: Some("lhs".to_string()),
             });
         },
         Rule::subtract => {

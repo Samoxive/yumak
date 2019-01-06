@@ -4,3 +4,11 @@ mahmut = 32 + 35;
 print(mahmut);
 print(testing);
 exit(testing);
+
+a = 3 + 4 + 5;
+
+_lit_x
+let _lit_1 = 3;
+let _lit_2 = 4;
+let _lit_1#add = _lit_1.add;
+call

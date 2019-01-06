@@ -262,6 +262,7 @@ impl ExecutionContext {
 
         let popped_value = match *object_value {
             Value::Integer(_) => types::integer::pop_integer_value(key_name),
+            Value::Float(_) => types::float::pop_float_value(key_name),
             Value::Object(ref map) => {
                 let map_lock = map.lock().unwrap();
                 map_lock

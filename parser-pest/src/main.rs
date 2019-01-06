@@ -52,15 +52,15 @@ fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> Vec<common:
                 value: rhs
             });
             insts.push(Inst::Alloc{
-                name: "lhs#add".to_string()
+                name: "lhs#plus".to_string()
             });
             insts.push(Inst::PopObjectValue{
-                pop_to_name: "lhs#add".to_string(),
+                pop_to_name: "lhs#plus".to_string(),
                 object_name: "lhs".to_string(),
-                key_name: "add".to_string(),
+                key_name: "plus".to_string(),
             });
             insts.push(Inst::Call{
-                name: "lhs#add".to_string(),
+                name: "lhs#plus".to_string(),
                 arguments: vec!["rhs".into()].into(),
                 this: Some("lhs".to_string()),
             });
@@ -81,12 +81,12 @@ fn consume<'i>(pair: Pair<'i, Rule>, climber: &PrecClimber<Rule>) -> Vec<common:
                 value: rhs
             });
             insts.push(Inst::Alloc{
-                name: "lhs#sub".to_string()
+                name: "lhs#minus".to_string()
             });
             insts.push(Inst::PopObjectValue{
-                pop_to_name: "lhs#sub".to_string(),
+                pop_to_name: "lhs#minus".to_string(),
                 object_name: "lhs".to_string(),
-                key_name: "sub".to_string(),
+                key_name: "minus".to_string(),
             });
             insts.push(Inst::Call{
                 name: "lhs#sub".to_string(),
@@ -318,9 +318,9 @@ fn main() {
         }
     }
 
-    let mut engine: ExecutionEngine = ExecutionEngine::new();
+    let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
     engine.push_task(main_context);
-    ExecutionEngine::run(new_syncmut(engine));
+    ExecutionEngine::run(&new_syncmut(engine));
     //println!("{:?}",insts);
 }

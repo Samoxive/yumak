@@ -20,6 +20,7 @@ operation = _{ add | subtract | multiply | divide | modulus | power }
 
 expr = { term ~ (operation ~ term)* }
 term = _{ "(" ~ expr ~ ")" | number }
+array =  {"["~term~(","~term)*~"]"}
 
 semicol = _{";"}
 equal = _{"="}

@@ -4,7 +4,8 @@ extern crate failure;
 
 use common::bytecode::Inst;
 use common::{new_syncmut, SyncMut};
-use engine::{ExecutionContext, ExecutionEngine};
+use engine::context::ExecutionContext;
+use engine::ExecutionEngine;
 use failure::Error;
 
 fn main() -> Result<(), Error> {

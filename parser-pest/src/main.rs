@@ -148,7 +148,7 @@ fn main() {
         }
     }
 
-    println!("{:?}",insts);
+    //println!("{:?}",insts);
     
     let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);

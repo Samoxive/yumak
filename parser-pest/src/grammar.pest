@@ -10,32 +10,32 @@ integer = {
     ASCII_DIGIT*}
 
 // TODO: add calls
-add      = { "+" }
-subtract = { "-" }
-multiply = { "*" }
-divide   = { "/" }
-operation = _{ add | subtract | multiply | divide }
+plus     = { "+" }
+minus    = { "-" }
+times    = { "*" }
+div      = { "/" }
+operation = _{ plus | minus | times | div }
 
 expr = { term ~ (operation ~ term)* }
 term = _{ "(" ~ expr ~ ")" | number }
+array =  {"["~number~(","~number)*~"]"}
 
 semicol = _{";"}
 equal = _{"="}
 
 let_allocate = {"let" ~ string_non_null}
 variable = {string_non_null}
-assignment = {(let_allocate | variable) ~ equal ~ number}
+assignment = {(let_allocate | variable) ~ equal ~ (array | number)}
 //for now it is number, make it term later for string, bool etc.
 
 function_call = {string_non_null ~ "(" ~ string_non_null ~ ")"}
 
 //TODO if stmt, while, (for iterated maybe)
 condition = {string_non_null}
+
 //TODO add if else if else if else
 if_stmt = {"if" ~ "("? ~ condition ~ ")"? ~ "{" ~ values* ~ "}" ~ "else"? ~ "{" ~ values* ~ "}" }
 while_stmt = {"while" ~ "("? ~ condition ~ ")"? ~ "{" ~ values* ~ "}"}
-
-//TODO add arrays etc. (list, object)
 
 file = {
     SOI ~

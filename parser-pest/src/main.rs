@@ -26,8 +26,7 @@ fn main() {
     let file = YumakParser::parse(Rule::file, &unparsed_file)
         .expect("unsuccessful parse") // unwrap the parse result
         .next().unwrap(); // get and unwrap the `file` rule; never fails
-    
-    //let mut current_section_name = "";
+
     let mut insts: Vec<Inst> = vec![];
     for line in file.into_inner() {
         match line.as_rule() {
@@ -73,7 +72,6 @@ fn main() {
                 let args = inner_rules.next().unwrap();
                 match args.as_rule() {
                     Rule::array => {
-                        //let result = args.as_str().parse::<String>().unwrap();
                         let mut inside = args.into_inner();
                         let mut variable = inside.next();
                         let mut name = &var_name;
@@ -147,9 +145,11 @@ fn main() {
         }
     }
 
+    println!("{:?}",insts);
+    /*
     let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
     engine.push_task(main_context);
     ExecutionEngine::run(&new_syncmut(engine));
-    //println!("{:?}",insts);
+    */
 }

@@ -13,9 +13,60 @@ use engine::context::ExecutionContext;
 
 use pest::{Parser,
     //error::Error as PestError,
-    //iterators::{Pair, Pairs},
-    //prec_climber::{Operator, PrecClimber, Assoc}
+    iterators::{Pair, Pairs},
+    prec_climber::{Operator, PrecClimber, Assoc}
 };
+
+pub enum ExprVal {
+    String(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Ident(String),
+    Math(MathExpr),
+    Logic(LogicExpr),
+    Test(Test),
+    MacroCall(MacroCall),
+    FunctionCall(FunctionCall),
+    Array(Vec<Expr>),
+    StringConcat(StringConcat),
+}
+
+#[macro_use]
+extern crate lazy_static;
+lazy_static! {
+    static ref PREC_CLIMBER: PrecClimber<Rule> = {
+        PrecClimber::new(vec![
+            Operator::new(Rule::plus, Assoc::Left) | Operator::new(Rule::minus, Assoc::Left),
+            Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::div, Assoc::Left)
+        ])
+    };
+}
+
+fn parse_expression(pair: Pair<Rule>) -> ExprVal {
+    let primary = |pair| parse_expression(pair);
+
+    let infix = |lhs: ExprVal, op: Pair<Rule>, rhs: ExprVal| {
+        ExprVal::Math(MathExpr {
+            lhs: Box::new(Expr::new(lhs)),
+            operator: match op.as_rule() {
+                Rule::plus => "+",
+                Rule::minus => "-",
+                Rule::times => "*",
+                Rule::div => "/",
+                _ => unreachable!(),
+            },
+            rhs: Box::new(Expr::new(rhs)),
+        })
+    };
+
+    match pair.as_rule() {
+        Rule::int => ExprVal::Int(pair.as_str().parse().unwrap()),
+        Rule::float => ExprVal::Float(pair.as_str().parse().unwrap()),
+        Rule::basic_expr => MATH_CLIMBER.climb(pair.into_inner(), primary, infix),
+        _ => unreachable!("Got {:?} in parse_basic_expression", pair.as_rule()),
+    }
+}
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -71,6 +122,7 @@ fn main() {
                 //println!("{:?}",variable);
                 let args = inner_rules.next().unwrap();
                 match args.as_rule() {
+                    Rule::expr => Some(parse_expression(args)),
                     Rule::array => {
                         let mut inside = args.into_inner();
                         let mut variable = inside.next();
@@ -149,10 +201,12 @@ fn main() {
     }
 
     //println!("{:?}",insts);
-    
+
+    /*
     let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
     engine.push_task(main_context);
     ExecutionEngine::run(&new_syncmut(engine));
+    */
     
 }

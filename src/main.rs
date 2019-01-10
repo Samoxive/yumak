@@ -256,8 +256,101 @@ fn sum_text() -> Result<(), Error> {
     ExecutionEngine::run(&new_syncmut(engine))
 }
 
+fn list_test() -> Result<(), Error> {
+    let mut engine: ExecutionEngine = Default::default();
+    let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(vec![
+        Inst::Alloc {
+            name: "testing".into(),
+        },
+        Inst::PushInt {
+            name: "testing".into(),
+            value: -5,
+        },
+        Inst::Alloc {
+            name: "arrayTest".into(),
+        },
+        Inst::PushList {
+            name: "arrayTest".into(),
+        },
+        Inst::Alloc {
+            name: "_arrayTest#push".into(),
+        },
+        Inst::PopObjectValue {
+            pop_to_name: "_arrayTest#push".into(),
+            object_name: "arrayTest".into(),
+            key_name: "push".into(),
+        },
+        Inst::Alloc {
+            name: "_lit_0".into(),
+        },
+        Inst::PushInt {
+            name: "_lit_0".into(),
+            value: 2,
+        },
+        Inst::Call {
+            name: "_arrayTest#push".into(),
+            arguments: vec!["_lit_0".into()].into(),
+            this: Some("arrayTest".into()),
+        },
+        Inst::Alloc {
+            name: "_lit_1".into(),
+        },
+        Inst::PushInt {
+            name: "_lit_1".into(),
+            value: 3,
+        },
+        Inst::Call {
+            name: "_arrayTest#push".into(),
+            arguments: vec!["_lit_1".into()].into(),
+            this: Some("arrayTest".into()),
+        },
+        Inst::Alloc {
+            name: "_lit_2".into(),
+        },
+        Inst::PushInt {
+            name: "_lit_2".into(),
+            value: 4,
+        },
+        Inst::Call {
+            name: "_arrayTest#push".into(),
+            arguments: vec!["_lit_2".into()].into(),
+            this: Some("arrayTest".into()),
+        },
+        Inst::Alloc {
+            name: "mahmut".into(),
+        },
+        Inst::PushFloat {
+            name: "mahmut".into(),
+            value: 32.23,
+        },
+        Inst::Call {
+            name: "print".into(),
+            arguments: vec!["arrayTest".into()].into(),
+            this: None,
+        },
+        Inst::Call {
+            name: "print".into(),
+            arguments: vec!["mahmut".into()].into(),
+            this: None,
+        },
+        Inst::Call {
+            name: "print".into(),
+            arguments: vec!["testing".into()].into(),
+            this: None,
+        },
+        Inst::Call {
+            name: "exit".into(),
+            arguments: vec![].into(),
+            this: None,
+        },
+    ]);
+    engine.push_task(main_context);
+    ExecutionEngine::run(&new_syncmut(engine))
+}
+
 fn main() {
-    fib(9).expect("works");
+    list_test().expect("works");
+    // fib(9).expect("works");
 }
 
 /*

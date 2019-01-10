@@ -82,7 +82,7 @@ fn main() {
                             name: format!("_{}#push", &var_name)
                         });
                         insts.push(Inst::PopObjectValue{
-                            pop_to_name:  format!("_{}#pop", &var_name), 
+                            pop_to_name:  format!("_{}#push", &var_name), 
                             object_name: format!("{}", &var_name), 
                             key_name: "push".into()
                         });
@@ -100,7 +100,7 @@ fn main() {
                                         value: result
                                     });
                                     insts.push(Inst::Call{
-                                        name: format!("_{}#pop", &var_name), 
+                                        name: format!("_{}#push", &var_name), 
                                         arguments: vec![format!("_lit_{}", arrayCtr)].into(), 
                                         this: Some(format!("{}", &var_name))
                                     });
@@ -115,7 +115,7 @@ fn main() {
                                         value: result
                                     });
                                     insts.push(Inst::Call{
-                                        name: format!("_{}#pop", &var_name), 
+                                        name: format!("_{}#push", &var_name), 
                                         arguments: vec![format!("_lit_{}", arrayCtr)].into(), 
                                         this: Some(format!("{}", &var_name))
                                     });

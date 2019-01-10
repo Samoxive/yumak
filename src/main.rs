@@ -349,8 +349,7 @@ fn list_test() -> Result<(), Error> {
 }
 
 fn main() {
-    list_test().expect("works");
-    // fib(9).expect("works");
+    fib(9).expect("works");
 }
 
 /*

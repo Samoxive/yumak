@@ -1,5 +1,7 @@
 let testing = -5;
+let arrayTest = [2, 3, 4];
 let mahmut;
 mahmut = 32.23;
 print(mahmut);
 print(testing);
+exit(testing);

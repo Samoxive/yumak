@@ -270,6 +270,7 @@ impl ExecutionContext {
             Value::Float(_) => types::float::pop_float_value(key_name),
             Value::String(_) => types::string::pop_string_value(key_name),
             Value::Boolean(_) => types::boolean::pop_boolean_value(key_name),
+            Value::List(_) => types::list::pop_list_value(key_name),
             Value::Object(ref map) => {
                 let map_lock = map.lock().unwrap();
                 map_lock

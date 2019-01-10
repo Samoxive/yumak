@@ -52,7 +52,7 @@ pub enum Value {
     Integer(i64),
     Float(f64),
     String(String),
-    List(Mutex<Vec<Value>>),
+    List(Mutex<Vec<RcValue>>),
     Object(Mutex<HashMap<String, RcValue>>),
     NativeFunction(NativeFunctionData),
     InterpretedFunction(InterpretedFunctionData),

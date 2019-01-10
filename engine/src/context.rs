@@ -158,6 +158,7 @@ impl ExecutionContext {
                 Inst::PushInt { name, value } => self.handle_push_int(name, value)?,
                 Inst::PushFloat { name, value } => self.handle_push_float(name, value)?,
                 Inst::PushBoolean { name, value } => self.handle_push_boolean(name, value)?,
+                Inst::PushString { name, value } => self.handle_push_string(name, value)?,
                 Inst::PushFunction {
                     name,
                     argument_names,
@@ -228,6 +229,10 @@ impl ExecutionContext {
         self.set_value(name, Value::Boolean(value).into())
     }
 
+    fn handle_push_string(&mut self, name: String, value: String) -> ExecutionResult {
+        self.set_value(name, Value::String(value).into())
+    }
+
     fn handle_push_function(
         &mut self,
         name: String,
@@ -263,6 +268,9 @@ impl ExecutionContext {
         let popped_value = match *object_value {
             Value::Integer(_) => types::integer::pop_integer_value(key_name),
             Value::Float(_) => types::float::pop_float_value(key_name),
+            Value::String(_) => types::string::pop_string_value(key_name),
+            Value::Boolean(_) => types::boolean::pop_boolean_value(key_name),
+            Value::List(_) => types::list::pop_list_value(key_name),
             Value::Object(ref map) => {
                 let map_lock = map.lock().unwrap();
                 map_lock

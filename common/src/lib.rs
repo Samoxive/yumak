@@ -25,6 +25,10 @@ pub mod bytecode {
             name: String,
             value: bool,
         },
+        PushString {
+            name: String,
+            value: String,
+        },
         PushFunction {
             name: String,
             argument_names: Arc<Vec<String>>,

@@ -18,6 +18,16 @@ fn verify_args<'a>(args: &'a Vec<RcValue>) -> &'a RcValue {
     args.get(0).expect("Integer::method requires an argument.")
 }
 
+fn eq_integer(this: Option<RcValue>, args: Vec<RcValue>) -> RcValue {
+    let this_int = verify_this(this);
+    let arg_value = verify_args(&args);
+
+    match **arg_value {
+        Value::Integer(ref arg_int) => Value::Boolean(this_int == (*arg_int)).into(),
+        _ => panic!("You tried to check equality with an incompatible type with integer."),
+    }
+}
+
 fn plus_integer(this: Option<RcValue>, args: Vec<RcValue>) -> RcValue {
     let this_int = verify_this(this);
     let arg_value = verify_args(&args);
@@ -75,6 +85,7 @@ fn mod_integer(this: Option<RcValue>, args: Vec<RcValue>) -> RcValue {
 
 pub fn pop_integer_value(key_name: &str) -> RcValue {
     match key_name {
+        "eq" => make_function(Box::new(eq_integer)),
         "plus" => make_function(Box::new(plus_integer)),
         "minus" => make_function(Box::new(minus_integer)),
         "times" => make_function(Box::new(times_integer)),

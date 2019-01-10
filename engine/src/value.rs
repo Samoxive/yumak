@@ -33,7 +33,7 @@ impl InterpretedFunctionData {
     ) -> Self {
         let mut label_points: HashMap<String, usize> = HashMap::new();
         for (i, elem) in instructions.iter().enumerate() {
-            if let Inst::GoTo { name } = elem {
+            if let Inst::Label { name } = elem {
                 label_points.insert(name.clone(), i);
             }
         }

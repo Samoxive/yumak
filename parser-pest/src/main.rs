@@ -74,7 +74,7 @@ fn main() {
                     Rule::array => {
                         let mut inside = args.into_inner();
                         let mut variable = inside.next();
-                        let mut name = &var_name;
+                        let name = &var_name;
                         insts.push(Inst::PushList{
                             name: name.to_string()
                         });
@@ -86,44 +86,44 @@ fn main() {
                             object_name: format!("{}", &var_name), 
                             key_name: "push".into()
                         });
-                        let mut arrayCtr = 0;
+                        let mut array_counter = 0;
                         while variable!=None {
-                            let variableUnwrap = variable.unwrap();
-                            match variableUnwrap.as_rule() {
+                            let variable_unwrap = variable.unwrap();
+                            match variable_unwrap.as_rule() {
                                 Rule::integer => {
-                                    let result = variableUnwrap.as_str().parse::<i64>().unwrap(); // { name ~ "=" ~ value }
+                                    let result = variable_unwrap.as_str().parse::<i64>().unwrap(); // { name ~ "=" ~ value }
                                     insts.push(Inst::Alloc{
-                                        name: format!("_lit_{}", arrayCtr)
+                                        name: format!("_lit_{}", array_counter)
                                     });
                                     insts.push(Inst::PushInt{
-                                        name: format!("_lit_{}", arrayCtr),
+                                        name: format!("_lit_{}", array_counter),
                                         value: result
                                     });
                                     insts.push(Inst::Call{
                                         name: format!("_{}#push", &var_name), 
-                                        arguments: vec![format!("_lit_{}", arrayCtr)].into(), 
+                                        arguments: vec![format!("_lit_{}", array_counter)].into(), 
                                         this: Some(format!("{}", &var_name))
                                     });
                                 },
                                 Rule::float => {
-                                    let result = variableUnwrap.as_str().parse::<f64>().unwrap(); // { name ~ "=" ~ value }
+                                    let result = variable_unwrap.as_str().parse::<f64>().unwrap(); // { name ~ "=" ~ value }
                                     insts.push(Inst::Alloc{
-                                        name: format!("_lit_{}", arrayCtr)
+                                        name: format!("_lit_{}", array_counter)
                                     });
                                     insts.push(Inst::PushFloat{
-                                        name: format!("_lit_{}", arrayCtr),
+                                        name: format!("_lit_{}", array_counter),
                                         value: result
                                     });
                                     insts.push(Inst::Call{
                                         name: format!("_{}#push", &var_name), 
-                                        arguments: vec![format!("_lit_{}", arrayCtr)].into(), 
+                                        arguments: vec![format!("_lit_{}", array_counter)].into(), 
                                         this: Some(format!("{}", &var_name))
                                     });
                                 }
                                 _=>unreachable!()
                             }
                             variable = inside.next();
-                            arrayCtr = arrayCtr+1;
+                            array_counter = array_counter+1;
                         } 
                     },
                     Rule::integer => {
@@ -148,11 +148,11 @@ fn main() {
         }
     }
 
-    println!("{:?}",insts);
+    //println!("{:?}",insts);
     
     let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
     engine.push_task(main_context);
-    ExecutionEngine::run(&new_syncmut(engine));
+    let _exec_run= ExecutionEngine::run(&new_syncmut(engine));
     
 }

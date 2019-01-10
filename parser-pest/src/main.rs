@@ -8,7 +8,8 @@ extern crate engine;
 
 use common::bytecode::Inst;
 use common::{new_syncmut, SyncMut};
-use engine::{ExecutionContext, ExecutionEngine};
+use engine::{ExecutionEngine};
+use engine::context::ExecutionContext;
 
 use pest::{Parser,
     //error::Error as PestError,
@@ -93,9 +94,9 @@ fn main() {
         }
     }
 
-    let mut engine: ExecutionEngine = ExecutionEngine::new();
+    let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
     engine.push_task(main_context);
-    ExecutionEngine::run(new_syncmut(engine));
+    ExecutionEngine::run(&new_syncmut(engine));
     //println!("{:?}",insts);
 }

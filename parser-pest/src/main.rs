@@ -78,6 +78,9 @@ fn main() {
                         insts.push(Inst::PushList{
                             name: name.to_string()
                         });
+                        insts.push(Inst::Alloc{
+                            name: format!("_{}#push", &var_name)
+                        });
                         insts.push(Inst::PopObjectValue{
                             pop_to_name:  format!("_{}#pop", &var_name), 
                             object_name: format!("{}", &var_name), 
@@ -145,11 +148,11 @@ fn main() {
         }
     }
 
-    println!("{:?}",insts);
-    /*
+    //println!("{:?}",insts);
+    
     let mut engine: ExecutionEngine = Default::default();
     let main_context: SyncMut<ExecutionContext> = ExecutionContext::from_instructions(insts);
     engine.push_task(main_context);
     ExecutionEngine::run(&new_syncmut(engine));
-    */
+    
 }

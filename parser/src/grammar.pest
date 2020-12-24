@@ -1,0 +1,53 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+char = { ASCII_ALPHANUMERIC | "." | "_" | "/" }
+string_non_null = { char+ }
+
+number = _{float | integer}
+float = {("-"|"+")? ~ ASCII_DIGIT* ~ (".") ~ ASCII_DIGIT*}
+integer = {
+    ("-"|"+")? ~ 
+    ASCII_DIGIT*}
+
+// TODO: add calls
+plus     = { "+" }
+minus    = { "-" }
+times    = { "*" }
+div      = { "/" }
+
+t_ops = _{times | div}
+p_ops = _{plus | minus}
+// operation = _{ t_ops | p_ops }
+
+
+expression = { term ~ (p_ops ~ term)* }
+term = { factor ~ (t_ops ~ factor)* }
+factor = {"(" ~ expression ~ ")" | minus ~ factor | number}
+
+array =  {"["~number~(","~number)*~"]"}
+
+semicol = _{";"}
+equal = _{"="}
+
+let_allocate = {"let" ~ string_non_null}
+variable = {string_non_null}
+
+//for now it is number, make it term later for string, bool etc.
+assignment = {(let_allocate | variable) ~ equal ~ (array | factor)} 
+
+function_call = {string_non_null ~ "(" ~ string_non_null? ~ ")"}
+
+//TODO if stmt, while, (for iterated maybe)
+condition = {string_non_null}
+
+//TODO add if else if else if else
+if_stmt = {"if" ~ "("? ~ condition ~ ")"? ~ "{" ~ values* ~ "}" ~ "else"? ~ "{" ~ values* ~ "}" }
+while_stmt = {"while" ~ "("? ~ condition ~ ")"? ~ "{" ~ values* ~ "}"}
+
+file = _{
+    SOI ~
+    values* ~
+    EOI
+}
+
+values = {( assignment | let_allocate | function_call) ~ semicol}

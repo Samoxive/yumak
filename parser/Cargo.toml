@@ -3,20 +3,14 @@ name = "parser"
 version = "0.1.0"
 authors = ["Ozan Karaali <ozan.karaali@gmail.com>"]
 edition = "2018"
-build = "build.rs" # LALRPOP preprocessing
 
 [dependencies]
-rustyline   = "*"
-regex       = "*"
-lazy_static = "*"
-ctrlc       = "*"
-gc          = "*"
-gc_derive   = "*"
-lalrpop-util = ">=0.16.2"
-
-# Add a build-time dependency on the lalrpop library:
-[build-dependencies]
-lalrpop = ">=0.16.2"
+pest = "2.1.3"
+pest_derive = "2.1.0"
+lazy_static = "1.4.0"
 
 [dependencies.common]
 path = "../common"
+
+[dependencies.engine]
+path = "../engine"

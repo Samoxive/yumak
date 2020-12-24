@@ -1,1 +1,9 @@
-let testing
+let testing = -5;
+let newtest = ( 2.0 + 3.0 );
+let arrayTest = [2, 3, 4];
+let mahmut;
+mahmut = 32.23;
+print(arrayTest);
+print(mahmut);
+print(testing);
+exit(testing);

@@ -33,7 +33,7 @@ let_allocate = {"let" ~ string_non_null}
 variable = {string_non_null}
 
 //for now it is number, make it term later for string, bool etc.
-assignment = {(let_allocate | variable) ~ equal ~ (array | factor)} 
+assignment = {(let_allocate | variable) ~ (equal ~ (array | factor))?} 
 
 function_call = {string_non_null ~ "(" ~ string_non_null? ~ ")"}
 
@@ -50,4 +50,4 @@ file = _{
     EOI
 }
 
-values = {( assignment | let_allocate | function_call) ~ semicol}
+values = {( assignment | function_call) ~ semicol}

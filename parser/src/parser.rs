@@ -22,11 +22,6 @@ pub fn parse(source: &str) -> std::result::Result<Vec<Inst>, pest::error::Error<
 fn build_ast_from_values(pair: Pair<Rule>) -> Inst {
     match pair.as_rule() {
         Rule::values => build_ast_from_values(pair.into_inner().next().unwrap()),
-        Rule::let_allocate => {
-            let mut pair = pair.into_inner();
-            let op = pair.next().unwrap();
-            build_ast_from_letallocate(op)
-        },
         Rule::function_call => {
             let mut pair = pair.into_inner();
             let func = pair.next().unwrap();
@@ -35,30 +30,32 @@ fn build_ast_from_values(pair: Pair<Rule>) -> Inst {
         },
         Rule::assignment => {
             let mut pair = pair.into_inner();
-            let variable = pair.next().unwrap();
-            let var_name = "".to_string();
-            match variable.as_rule() {
+            let pair = pair.next().unwrap();
+            let mut var_name = "".to_string();
+            match pair.as_rule() {
                 Rule::let_allocate => {
-                    // TODO: How to get varname?
-                    // var_name = pair.into_inner().next().unwrap().as_str().to_string();
-                    build_ast_from_values(variable);
+                    let mut pair = pair.into_inner();
+                    let op = pair.next().unwrap();
+                    var_name = op.as_str().to_string(); //pair.as_span().as_str()[4..].to_string();
+                    println!{"{:?}", var_name}
+                    build_ast_from_letallocate(op)
                 },
-                Rule::variable => {
-                    let mut pair = variable.into_inner();
-                    // var_name = pair.next().unwrap().as_str().to_string();
-                    },
+                // Rule::variable => {
+                //     // let mut pair = variable.into_inner();
+                //     var_name = variable.as_span().as_str().to_string();
+                //     },
                 _ => unreachable!()
             }
-            let args = pair.next().unwrap();
-            match args.as_rule(){
-                Rule::factor => {
-                    Inst::PushInt{
-                        name: var_name,
-                        value: args.as_str().parse::<i64>().unwrap()
-                    }
-                },
-                _ => unreachable!()
-            }
+            // let args = pair.next().unwrap();
+            // match args.as_rule(){
+            //     Rule::factor => {
+            //         Inst::PushInt{
+            //             name: var_name,
+            //             value: args.as_str().parse::<i64>().unwrap()
+            //         }
+            //     },
+            //     _ => unreachable!()
+            // }
         },
         Rule::EOI => (
             Inst::Call{
